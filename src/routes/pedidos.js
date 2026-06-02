@@ -1,0 +1,84 @@
+const express = require('express');
+const db      = require('../db/database');
+const { requireLogin } = require('../middleware/auth');
+const router  = express.Router();
+
+router.use(requireLogin);
+
+// Listar pedidos
+router.get('/api/pedidos', (req, res) => {
+    const rows = db.prepare(`
+        SELECT p.*, u.nombre AS usuario
+        FROM pedidos p
+        LEFT JOIN usuarios u ON u.id = p.usuario_id
+        ORDER BY p.fecha_pedido DESC
+    `).all();
+    res.json(rows);
+});
+
+// Obtener pedido con detalles
+router.get('/api/pedidos/:id', (req, res) => {
+    const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id);
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado.' });
+
+    const detalles = db.prepare(`
+        SELECT d.*, pr.nombre AS producto_nombre, pr.unidad
+        FROM pedido_detalles d
+        JOIN productos pr ON pr.id = d.producto_id
+        WHERE d.pedido_id = ?
+    `).all(req.params.id);
+
+    res.json({ ...pedido, detalles });
+});
+
+// Crear pedido
+router.post('/api/pedidos', (req, res) => {
+    const { cliente_nombre, cliente_contacto, fecha_entrega, notas, detalles } = req.body;
+    if (!cliente_nombre || !detalles || !detalles.length) {
+        return res.status(400).json({ error: 'Faltan datos del pedido.' });
+    }
+
+    const total = detalles.reduce((sum, d) => sum + d.cantidad * d.precio, 0);
+
+    const result = db.transaction(() => {
+        const info = db.prepare(`
+            INSERT INTO pedidos (cliente_nombre, cliente_contacto, fecha_entrega, notas, total, usuario_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(cliente_nombre, cliente_contacto || null, fecha_entrega || null,
+               notas || null, total, req.session.usuario.id);
+
+        const pedidoId = info.lastInsertRowid;
+
+        const insertDetalle = db.prepare(`
+            INSERT INTO pedido_detalles (pedido_id, producto_id, cantidad, precio)
+            VALUES (?, ?, ?, ?)
+        `);
+
+        for (const d of detalles) {
+            insertDetalle.run(pedidoId, d.producto_id, d.cantidad, d.precio);
+        }
+
+        return pedidoId;
+    })();
+
+    res.json({ ok: true, id: result });
+});
+
+// Actualizar estado del pedido
+router.patch('/api/pedidos/:id/estado', (req, res) => {
+    const { estado } = req.body;
+    const estados = ['pendiente', 'en_proceso', 'entregado', 'cancelado'];
+    if (!estados.includes(estado)) {
+        return res.status(400).json({ error: 'Estado inválido.' });
+    }
+    db.prepare('UPDATE pedidos SET estado = ? WHERE id = ?').run(estado, req.params.id);
+    res.json({ ok: true });
+});
+
+// Eliminar pedido
+router.delete('/api/pedidos/:id', (req, res) => {
+    db.prepare('DELETE FROM pedidos WHERE id = ?').run(req.params.id);
+    res.json({ ok: true });
+});
+
+module.exports = router;

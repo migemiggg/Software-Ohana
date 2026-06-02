@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Dashboard</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-name">OhanApp</span>
+            <small>Ohana&reg; &middot; Panel de control</small>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Dashboard</h3>
+            <div class="user-badge">
+                <div class="avatar" id="avatar-initials">?</div>
+                <span id="user-name">Cargando...</span>
+            </div>
+        </div>
+
+        <div class="page-body">
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.875rem;margin-bottom:1.25rem">
+                <div class="stat-card">
+                    <div class="stat-icon icon-green"><i data-lucide="package"></i></div>
+                    <div class="stat-value" id="total-productos">-</div>
+                    <div class="stat-label">Productos en inventario</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-red"><i data-lucide="alert-triangle"></i></div>
+                    <div class="stat-value" id="alertas-stock">-</div>
+                    <div class="stat-label">Alertas de stock bajo</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-blue"><i data-lucide="shopping-cart"></i></div>
+                    <div class="stat-value" id="pedidos-pendientes">-</div>
+                    <div class="stat-label">Pedidos pendientes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon icon-yellow"><i data-lucide="bell"></i></div>
+                    <div class="stat-value" id="recordatorios-pendientes">-</div>
+                    <div class="stat-label">Recordatorios pendientes</div>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                <div class="table-card accent-red">
+                    <div class="table-card-header">
+                        <h5>Stock bajo</h5>
+                        <a href="/inventario" style="font-size:.78rem;color:var(--red-dark)">Ver todo</a>
+                    </div>
+                    <table>
+                        <thead><tr><th>Producto</th><th>Stock</th><th>Minimo</th></tr></thead>
+                        <tbody id="tbl-alertas"><tr><td colspan="3" style="text-align:center;padding:1.5rem;color:#9ca3af">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+
+                <div class="table-card accent-blue">
+                    <div class="table-card-header">
+                        <h5>Pedidos recientes</h5>
+                        <a href="/pedidos" style="font-size:.78rem;color:var(--red-dark)">Ver todo</a>
+                    </div>
+                    <table>
+                        <thead><tr><th>Cliente</th><th>Estado</th><th>Total</th></tr></thead>
+                        <tbody id="tbl-pedidos"><tr><td colspan="3" style="text-align:center;padding:1.5rem;color:#9ca3af">Cargando...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-card accent-yellow" style="margin-top:1rem">
+                <div class="table-card-header">
+                    <h5>Recordatorios pendientes</h5>
+                    <a href="/recordatorios" style="font-size:.78rem;color:var(--red-dark)">Gestionar</a>
+                </div>
+                <table>
+                    <thead><tr><th>Titulo</th><th>Descripcion</th><th>Fecha</th></tr></thead>
+                    <tbody id="tbl-recordatorios"><tr><td colspan="3" style="text-align:center;padding:1.5rem;color:#9ca3af">Cargando...</td></tr></tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+    const ses = await api.get('/api/session');
+    if (!ses.ok) { window.location.href = '/login'; return; }
+    document.getElementById('user-name').textContent = ses.usuario.nombre;
+    document.getElementById('avatar-initials').textContent = ses.usuario.nombre.charAt(0).toUpperCase();
+
+    const [productos, alertas, pedidos, recordatorios] = await Promise.all([
+        api.get('/api/productos'),
+        api.get('/api/alertas/stock'),
+        api.get('/api/pedidos'),
+        api.get('/api/recordatorios')
+    ]);
+
+    document.getElementById('total-productos').textContent          = productos.length;
+    document.getElementById('alertas-stock').textContent            = alertas.length;
+    document.getElementById('pedidos-pendientes').textContent       = pedidos.filter(p => p.estado === 'pendiente').length;
+    document.getElementById('recordatorios-pendientes').textContent = recordatorios.filter(r => !r.completado).length;
+
+    const tblA = document.getElementById('tbl-alertas');
+    tblA.innerHTML = alertas.length
+        ? alertas.slice(0,5).map(p => `<tr>
+            <td>${p.nombre}</td>
+            <td><span class="badge badge-red">${p.stock_actual} ${p.unidad}</span></td>
+            <td>${p.stock_minimo} ${p.unidad}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="text-align:center;padding:1.5rem;color:#9ca3af">Sin alertas</td></tr>';
+
+    const tblP = document.getElementById('tbl-pedidos');
+    tblP.innerHTML = pedidos.length
+        ? pedidos.slice(0,5).map(p => `<tr>
+            <td>${p.cliente_nombre}</td>
+            <td>${estadoBadge(p.estado)}</td>
+            <td>${fmt(p.total)}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="text-align:center;padding:1.5rem;color:#9ca3af">Sin pedidos</td></tr>';
+
+    const pend = recordatorios.filter(r => !r.completado);
+    const tblR = document.getElementById('tbl-recordatorios');
+    tblR.innerHTML = pend.length
+        ? pend.slice(0,5).map(r => `<tr>
+            <td>${r.titulo}</td>
+            <td style="color:#6b7280;font-size:.85rem">${r.descripcion || '&mdash;'}</td>
+            <td>${fmtFecha(r.fecha)}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="text-align:center;padding:1.5rem;color:#9ca3af">Sin recordatorios pendientes</td></tr>';
+})();
+</script>
+</body>
+</html>

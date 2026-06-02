@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Reportes</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- SheetJS para exportación Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+    /* ── Tabs ─────────────────────────────────────── */
+    .report-tabs {
+        display: flex;
+        gap: .375rem;
+        border-bottom: 2px solid #e5e7eb;
+        margin-bottom: 1.25rem;
+    }
+    .report-tab {
+        padding: .5rem 1.1rem;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: .875rem;
+        color: #6b7280;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        transition: color .15s;
+    }
+    .report-tab.active {
+        color: var(--ohana-primary);
+        border-bottom-color: var(--ohana-primary);
+        font-weight: 600;
+    }
+    .report-tab:hover { color: var(--ohana-primary); }
+
+    /* ── Panel de reporte ─────────────────────────── */
+    .report-panel { display: none; }
+    .report-panel.active { display: block; }
+
+    /* ── Filtros ──────────────────────────────────── */
+    .filter-bar {
+        display: flex;
+        align-items: flex-end;
+        gap: .75rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+        padding: .875rem 1rem;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: var(--radius);
+    }
+    .filter-bar .form-group { margin: 0; }
+    .filter-bar label { font-size: .75rem; color: #6b7280; margin-bottom: .25rem; display: block; }
+    .filter-bar .form-control { height: 34px; font-size: .85rem; }
+    .filter-bar select.form-control { padding: 0 .5rem; }
+
+    /* ── Resumen chips ────────────────────────────── */
+    .resumen-row {
+        display: flex;
+        gap: .625rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+    .resumen-chip {
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: var(--radius);
+        padding: .45rem .85rem;
+        font-size: .8rem;
+        color: #374151;
+    }
+    .resumen-chip strong { color: var(--ohana-primary); }
+
+    /* ── Barra de acciones ────────────────────────── */
+    .actions-bar {
+        display: flex;
+        justify-content: flex-end;
+        gap: .5rem;
+        margin-bottom: .75rem;
+    }
+    .btn-export {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .85rem;
+        border-radius: var(--radius);
+        border: 1px solid;
+        font-size: .82rem;
+        cursor: pointer;
+        font-weight: 500;
+    }
+    .btn-export.pdf {
+        background: #fff1f2;
+        border-color: #fecdd3;
+        color: #be123c;
+    }
+    .btn-export.excel {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #15803d;
+    }
+    .btn-export:hover { filter: brightness(.95); }
+
+    /* ── Tabla reporte ────────────────────────────── */
+    .report-table-wrap { overflow-x: auto; }
+    .report-table-wrap table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    .report-table-wrap th {
+        background: #f9fafb;
+        border-bottom: 2px solid #e5e7eb;
+        padding: .5rem .75rem;
+        text-align: left;
+        font-size: .75rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        white-space: nowrap;
+    }
+    .report-table-wrap td {
+        padding: .5rem .75rem;
+        border-bottom: 1px solid #f3f4f6;
+        color: #374151;
+    }
+    .report-table-wrap tr:last-child td { border-bottom: none; }
+    .report-table-wrap tr:hover td { background: #fafafa; }
+
+    /* Alerta de stock bajo */
+    .alerta-row td { background: #fff7ed !important; }
+
+    /* ── @media print ─────────────────────────────── */
+    @media print {
+        .sidebar,
+        .topbar,
+        .report-tabs,
+        .filter-bar,
+        .actions-bar,
+        .sidebar-footer,
+        #toast { display: none !important; }
+
+        .app-layout { display: block; }
+        .main-content { margin: 0; padding: 0; }
+        .page-body { padding: 0; }
+        .report-panel { display: block !important; }
+
+        .print-header {
+            display: flex !important;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: .75rem;
+            padding-bottom: .5rem;
+            border-bottom: 2px solid #111;
+        }
+        .print-header h2 { margin: 0; font-size: 1.1rem; }
+        .print-header span { font-size: .8rem; color: #555; }
+
+        .report-table-wrap th { background: #f0f0f0 !important; }
+        .resumen-row { margin-bottom: .5rem; }
+        .table-card { box-shadow: none; border: 1px solid #ddd; }
+
+        /* Solo imprime el panel activo */
+        .report-panel:not(.active) { display: none !important; }
+    }
+
+    /* Ocultar print-header en pantalla */
+    .print-header { display: none; }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-name">OhanApp</span>
+            <small>Ohana&reg; &middot; Panel de control</small>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Reportes</h3>
+            <div class="user-badge">
+                <div class="avatar" id="avatar-initials">?</div>
+                <span id="user-name">Cargando...</span>
+            </div>
+        </div>
+
+        <div class="page-body">
+
+            <!-- Pestañas -->
+            <div class="report-tabs" role="tablist">
+                <button class="report-tab active" data-tab="inventario" onclick="cambiarTab('inventario')">
+                    <i data-lucide="package"></i> Inventario
+                </button>
+                <button class="report-tab" data-tab="movimientos" onclick="cambiarTab('movimientos')">
+                    <i data-lucide="arrow-left-right"></i> Movimientos
+                </button>
+                <button class="report-tab" data-tab="pedidos" onclick="cambiarTab('pedidos')">
+                    <i data-lucide="shopping-cart"></i> Pedidos
+                </button>
+            </div>
+
+            <!-- ══════════════════════════════════════════
+                 PANEL: INVENTARIO
+                 ══════════════════════════════════════════ -->
+            <div class="report-panel active" id="panel-inventario">
+
+                <div class="print-header">
+                    <h2>Reporte de Inventario &mdash; OhanApp</h2>
+                    <span id="print-fecha-inv"></span>
+                </div>
+
+                <div class="actions-bar">
+                    <button class="btn-export pdf"   onclick="imprimirPDF('inventario')">
+                        <i data-lucide="file-text"></i> Exportar PDF
+                    </button>
+                    <button class="btn-export excel" onclick="exportarExcel('inventario')">
+                        <i data-lucide="table"></i> Exportar Excel
+                    </button>
+                </div>
+
+                <!-- Resumen chips (se llenan con JS) -->
+                <div class="resumen-row" id="res-inv"></div>
+
+                <div class="table-card">
+                    <div class="report-table-wrap">
+                        <table id="tbl-inventario">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Producto</th>
+                                    <th>Categoría</th>
+                                    <th>Unidad</th>
+                                    <th>Stock actual</th>
+                                    <th>Stock mínimo</th>
+                                    <th>Precio unit.</th>
+                                    <th>Valor total</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-inventario">
+                                <tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════════════════════════════════════════
+                 PANEL: MOVIMIENTOS
+                 ══════════════════════════════════════════ -->
+            <div class="report-panel" id="panel-movimientos">
+
+                <div class="print-header">
+                    <h2>Reporte de Movimientos &mdash; OhanApp</h2>
+                    <span id="print-fecha-mov"></span>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="form-group">
+                        <label>Desde</label>
+                        <input type="date" id="mov-desde" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Hasta</label>
+                        <input type="date" id="mov-hasta" class="form-control">
+                    </div>
+                    <button class="btn-ohana" style="height:34px;padding:.3rem .85rem;font-size:.85rem" onclick="cargarMovimientos()">
+                        <i data-lucide="search"></i> Consultar
+                    </button>
+                </div>
+
+                <div class="actions-bar">
+                    <button class="btn-export pdf"   onclick="imprimirPDF('movimientos')">
+                        <i data-lucide="file-text"></i> Exportar PDF
+                    </button>
+                    <button class="btn-export excel" onclick="exportarExcel('movimientos')">
+                        <i data-lucide="table"></i> Exportar Excel
+                    </button>
+                </div>
+
+                <div class="resumen-row" id="res-mov"></div>
+
+                <div class="table-card">
+                    <div class="report-table-wrap">
+                        <table id="tbl-movimientos">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Fecha</th>
+                                    <th>Producto</th>
+                                    <th>Tipo</th>
+                                    <th>Cantidad</th>
+                                    <th>Unidad</th>
+                                    <th>Motivo</th>
+                                    <th>Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-movimientos">
+                                <tr><td colspan="8" style="text-align:center;padding:2rem;color:#9ca3af">Selecciona un rango y consulta</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════════════════════════════════════════
+                 PANEL: PEDIDOS
+                 ══════════════════════════════════════════ -->
+            <div class="report-panel" id="panel-pedidos">
+
+                <div class="print-header">
+                    <h2>Reporte de Pedidos &mdash; OhanApp</h2>
+                    <span id="print-fecha-ped"></span>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="form-group">
+                        <label>Desde</label>
+                        <input type="date" id="ped-desde" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Hasta</label>
+                        <input type="date" id="ped-hasta" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select id="ped-estado" class="form-control" style="min-width:130px">
+                            <option value="">Todos</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="en_proceso">En proceso</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="cancelado">Cancelado</option>
+                        </select>
+                    </div>
+                    <button class="btn-ohana" style="height:34px;padding:.3rem .85rem;font-size:.85rem" onclick="cargarPedidos()">
+                        <i data-lucide="search"></i> Consultar
+                    </button>
+                </div>
+
+                <div class="actions-bar">
+                    <button class="btn-export pdf"   onclick="imprimirPDF('pedidos')">
+                        <i data-lucide="file-text"></i> Exportar PDF
+                    </button>
+                    <button class="btn-export excel" onclick="exportarExcel('pedidos')">
+                        <i data-lucide="table"></i> Exportar Excel
+                    </button>
+                </div>
+
+                <div class="resumen-row" id="res-ped"></div>
+
+                <div class="table-card">
+                    <div class="report-table-wrap">
+                        <table id="tbl-pedidos">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Fecha pedido</th>
+                                    <th>Cliente</th>
+                                    <th>Contacto</th>
+                                    <th>Estado</th>
+                                    <th>Total</th>
+                                    <th>Fecha entrega</th>
+                                    <th>Usuario</th>
+                                    <th>Notas</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-pedidos">
+                                <tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Selecciona un rango y consulta</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /page-body -->
+    </div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script>
+/* ─────────────────────────────────────────────
+   Estado global por panel
+   ───────────────────────────────────────────── */
+const state = { inventario: [], movimientos: [], pedidos: [] };
+let tabActiva = 'inventario';
+
+/* ─────────────────────────────────────────────
+   Utilidades de fecha
+   ───────────────────────────────────────────── */
+function hoy()       { return new Date().toISOString().slice(0, 10); }
+function hace30()    { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); }
+function fmtDT(s) { return s ? s.slice(0, 16).replace('T', ' ') : '—'; }
+function fmtMoney(n) { return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }); }
+
+/* ─────────────────────────────────────────────
+   Cambio de pestaña
+   ───────────────────────────────────────────── */
+function cambiarTab(tab) {
+    tabActiva = tab;
+    document.querySelectorAll('.report-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.report-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${tab}`));
+    lucide.createIcons();
+}
+
+/* ─────────────────────────────────────────────
+   INVENTARIO
+   ───────────────────────────────────────────── */
+async function cargarInventario() {
+    let data;
+    try { data = await api.get('/api/reportes/inventario'); }
+    catch(e) {
+        document.getElementById('tbody-inventario').innerHTML =
+            '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#dc2626">Error de conexión con el servidor</td></tr>';
+        return;
+    }
+    if (!data.ok) return toast('Error al cargar inventario', 'error');
+
+    state.inventario = data.items;
+
+    // Resumen
+    document.getElementById('res-inv').innerHTML = `
+        <div class="resumen-chip">Productos: <strong>${data.resumen.total_productos}</strong></div>
+        <div class="resumen-chip">Valor inventario: <strong>${fmtMoney(data.resumen.total_valor)}</strong></div>
+        <div class="resumen-chip" style="${data.resumen.bajo_minimo > 0 ? 'background:#fff7ed;border-color:#fed7aa;color:#92400e' : ''}">
+            Bajo mínimo: <strong>${data.resumen.bajo_minimo}</strong>
+        </div>`;
+
+    const tbody = document.getElementById('tbody-inventario');
+    if (!data.items.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Sin productos registrados</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.items.map((p, i) => `
+        <tr class="${p.alerta ? 'alerta-row' : ''}">
+            <td>${i + 1}</td>
+            <td><strong>${p.nombre}</strong></td>
+            <td>${p.categoria}</td>
+            <td>${p.unidad}</td>
+            <td>${p.stock_actual}</td>
+            <td>${p.stock_minimo}</td>
+            <td>${fmtMoney(p.precio_unitario)}</td>
+            <td>${fmtMoney(p.valor_total)}</td>
+            <td>${p.alerta
+                ? '<span class="badge" style="background:#fee2e2;color:#991b1b">Stock bajo</span>'
+                : '<span class="badge" style="background:#dcfce7;color:#166534">OK</span>'}</td>
+        </tr>`).join('');
+    lucide.createIcons();
+}
+
+/* ─────────────────────────────────────────────
+   MOVIMIENTOS
+   ───────────────────────────────────────────── */
+async function cargarMovimientos() {
+    const desde = document.getElementById('mov-desde').value || hace30();
+    const hasta = document.getElementById('mov-hasta').value || hoy();
+
+    const data = await api.get(`/api/reportes/movimientos?desde=${desde}&hasta=${hasta}`);
+    if (!data.ok) return toast('Error al cargar movimientos', 'error');
+
+    state.movimientos = data.movimientos;
+
+    document.getElementById('res-mov').innerHTML = `
+        <div class="resumen-chip">Período: <strong>${desde}</strong> al <strong>${hasta}</strong></div>
+        <div class="resumen-chip">Registros: <strong>${data.resumen.total_registros}</strong></div>
+        <div class="resumen-chip" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">
+            Entradas: <strong>${data.resumen.total_entradas}</strong>
+        </div>
+        <div class="resumen-chip" style="background:#fff1f2;border-color:#fecdd3;color:#be123c">
+            Salidas: <strong>${data.resumen.total_salidas}</strong>
+        </div>`;
+
+    const tbody = document.getElementById('tbody-movimientos');
+    if (!data.movimientos.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#9ca3af">Sin movimientos en el período</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.movimientos.map((m, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td style="white-space:nowrap">${fmtDT(m.fecha)}</td>
+            <td>${m.producto || '—'}</td>
+            <td>${m.tipo === 'entrada'
+                ? '<span class="badge" style="background:#dcfce7;color:#166534">Entrada</span>'
+                : '<span class="badge" style="background:#fee2e2;color:#991b1b">Salida</span>'}</td>
+            <td>${m.cantidad}</td>
+            <td>${m.unidad || '—'}</td>
+            <td>${m.motivo || '—'}</td>
+            <td>${m.usuario}</td>
+        </tr>`).join('');
+    lucide.createIcons();
+}
+
+/* ─────────────────────────────────────────────
+   PEDIDOS
+   ───────────────────────────────────────────── */
+const estadoLabel = {
+    pendiente:  ['#fef9c3','#854d0e','Pendiente'],
+    en_proceso: ['#dbeafe','#1e40af','En proceso'],
+    entregado:  ['#dcfce7','#166534','Entregado'],
+    cancelado:  ['#fee2e2','#991b1b','Cancelado']
+};
+
+async function cargarPedidos() {
+    const desde  = document.getElementById('ped-desde').value  || hace30();
+    const hasta  = document.getElementById('ped-hasta').value  || hoy();
+    const estado = document.getElementById('ped-estado').value || '';
+
+    const qs   = `desde=${desde}&hasta=${hasta}${estado ? '&estado=' + estado : ''}`;
+    const data = await api.get(`/api/reportes/pedidos?${qs}`);
+    if (!data.ok) return toast('Error al cargar pedidos', 'error');
+
+    state.pedidos = data.pedidos;
+
+    const porEstado = Object.entries(data.resumen.por_estado || {})
+        .map(([k, v]) => {
+            const [bg, col, lbl] = estadoLabel[k] || ['#f3f4f6','#374151', k];
+            return `<div class="resumen-chip" style="background:${bg};border-color:${bg};color:${col}">${lbl}: <strong>${v}</strong></div>`;
+        }).join('');
+
+    document.getElementById('res-ped').innerHTML = `
+        <div class="resumen-chip">Período: <strong>${desde}</strong> al <strong>${hasta}</strong></div>
+        <div class="resumen-chip">Total pedidos: <strong>${data.resumen.total_pedidos}</strong></div>
+        <div class="resumen-chip">Monto total: <strong>${fmtMoney(data.resumen.monto_total)}</strong></div>
+        ${porEstado}`;
+
+    const tbody = document.getElementById('tbody-pedidos');
+    if (!data.pedidos.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Sin pedidos en el período</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.pedidos.map((p, i) => {
+        const [bg, col, lbl] = estadoLabel[p.estado] || ['#f3f4f6','#374151', p.estado];
+        return `<tr>
+            <td>${i + 1}</td>
+            <td style="white-space:nowrap">${fmtDT(p.fecha_pedido)}</td>
+            <td><strong>${p.cliente_nombre}</strong></td>
+            <td>${p.cliente_contacto || '—'}</td>
+            <td><span class="badge" style="background:${bg};color:${col}">${lbl}</span></td>
+            <td>${fmtMoney(p.total)}</td>
+            <td>${p.fecha_entrega ? fmtDT(p.fecha_entrega) : '—'}</td>
+            <td>${p.usuario}</td>
+            <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.notas || '—'}</td>
+        </tr>`;
+    }).join('');
+    lucide.createIcons();
+}
+
+/* ─────────────────────────────────────────────
+   EXPORTAR PDF  (impresión del navegador)
+   ───────────────────────────────────────────── */
+function imprimirPDF(panel) {
+    // Asegurar panel activo y stamp de fecha/hora
+    cambiarTab(panel);
+    const ts = new Date().toLocaleString('es-MX');
+    document.getElementById(`print-fecha-${panel === 'inventario' ? 'inv' : panel === 'movimientos' ? 'mov' : 'ped'}`).textContent =
+        'Generado: ' + ts;
+    setTimeout(() => window.print(), 150);
+}
+
+/* ─────────────────────────────────────────────
+   EXPORTAR EXCEL  (SheetJS)
+   ───────────────────────────────────────────── */
+function exportarExcel(panel) {
+    let rows = [], nombre = '';
+
+    if (panel === 'inventario') {
+        nombre = 'Inventario';
+        rows = state.inventario.map((p, i) => ({
+            '#':            i + 1,
+            'Producto':     p.nombre,
+            'Categoría':    p.categoria,
+            'Unidad':       p.unidad,
+            'Stock actual': p.stock_actual,
+            'Stock mínimo': p.stock_minimo,
+            'Precio unit.': p.precio_unitario,
+            'Valor total':  p.valor_total,
+            'Estado':       p.alerta ? 'Stock bajo' : 'OK'
+        }));
+    } else if (panel === 'movimientos') {
+        nombre = 'Movimientos';
+        rows = state.movimientos.map((m, i) => ({
+            '#':        i + 1,
+            'Fecha':    fmtDT(m.fecha),
+            'Producto': m.producto || '—',
+            'Tipo':     m.tipo,
+            'Cantidad': m.cantidad,
+            'Unidad':   m.unidad || '—',
+            'Motivo':   m.motivo || '—',
+            'Usuario':  m.usuario
+        }));
+    } else if (panel === 'pedidos') {
+        nombre = 'Pedidos';
+        rows = state.pedidos.map((p, i) => ({
+            '#':              i + 1,
+            'Fecha pedido':   fmtDT(p.fecha_pedido),
+            'Cliente':        p.cliente_nombre,
+            'Contacto':       p.cliente_contacto || '—',
+            'Estado':         p.estado,
+            'Total':          p.total,
+            'Fecha entrega':  p.fecha_entrega ? fmtDT(p.fecha_entrega) : '—',
+            'Usuario':        p.usuario,
+            'Notas':          p.notas || '—'
+        }));
+    }
+
+    if (!rows.length) return toast('No hay datos para exportar', 'error');
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Ancho de columnas automático
+    const maxW = rows.reduce((acc, row) => {
+        Object.keys(row).forEach((k, i) => {
+            const len = String(row[k]).length;
+            acc[i] = Math.max(acc[i] || k.length, len);
+        });
+        return acc;
+    }, {});
+    ws['!cols'] = Object.values(maxW).map(w => ({ wch: Math.min(w + 2, 40) }));
+
+    XLSX.utils.book_append_sheet(wb, ws, nombre);
+    const fecha = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `OhanApp_${nombre}_${fecha}.xlsx`);
+    toast(`Excel descargado: OhanApp_${nombre}_${fecha}.xlsx`);
+}
+
+/* ─────────────────────────────────────────────
+   Init
+   ───────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', async () => {
+    // Cargar sesión → nombre de usuario
+    try {
+        const ses = await api.get('/api/session');
+        if (ses.ok && ses.usuario) {
+            document.getElementById('user-name').textContent = ses.usuario.nombre;
+            document.getElementById('avatar-initials').textContent =
+                ses.usuario.nombre.charAt(0).toUpperCase();
+        }
+    } catch(_) {}
+
+    // Fechas por defecto en filtros
+    const h = hoy(), h30 = hace30();
+    document.getElementById('mov-desde').value = h30;
+    document.getElementById('mov-hasta').value = h;
+    document.getElementById('ped-desde').value = h30;
+    document.getElementById('ped-hasta').value = h;
+
+    await cargarInventario();
+    lucide.createIcons();
+});
+</script>
+</body>
+</html>

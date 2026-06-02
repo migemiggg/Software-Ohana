@@ -1,0 +1,14 @@
+node_modules/
+*.db
+*.db-journal
+.env
+.DS_Store
+CHANGELOG.md
+docs/OhanApp_Bocetos_Arquitectura_Cronograma.docx
+docs/OhanApp_Modelo_BaseDatos.docx
+docs/OhanApp_Propuesta_Requerimientos.docx
+Ejercicio19_Bitacora_Semana18-22Mayo.docx
+docs/OhanApp_Propuesta_Requerimientos.docx
+docs/OhanApp_Modelo_BaseDatos.docx
+docs/OhanApp_Bocetos_Arquitectura_Cronograma.docx
+CHANGELOG.md

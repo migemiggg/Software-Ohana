@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Calculo de insumos</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-name">OhanApp</span>
+            <small>Ohana&reg; &middot; Panel de control</small>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Calculo de Insumos</h3>
+            <button class="btn-ohana" onclick="abrirModalReceta()">
+                <i data-lucide="plus"></i> Nueva receta
+            </button>
+        </div>
+
+        <div class="page-body">
+            <div style="display:grid;grid-template-columns:280px 1fr;gap:1rem;align-items:start">
+
+                <div class="table-card">
+                    <div class="table-card-header"><h5>Recetas</h5></div>
+                    <div id="lista-recetas" style="padding:.5rem">
+                        <p style="color:#9ca3af;padding:.5rem;font-size:.85rem">Cargando...</p>
+                    </div>
+                </div>
+
+                <div>
+                    <div id="panel-calcular" style="display:none">
+                        <div class="table-card" style="margin-bottom:.875rem">
+                            <div class="table-card-header">
+                                <h5 id="nombre-receta-sel">&mdash;</h5>
+                                <button class="btn-icon danger" title="Eliminar receta" onclick="eliminarRecetaSel()">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </div>
+                            <div style="padding:.875rem;display:flex;align-items:center;gap:.75rem">
+                                <label style="font-size:.875rem;font-weight:600;white-space:nowrap">Calcular para</label>
+                                <input type="number" id="porciones-calc" class="form-control" style="width:80px" min="1" step="0.5" value="1" oninput="calcular()">
+                                <span id="label-porciones" style="color:#6b7280;font-size:.875rem"></span>
+                            </div>
+                        </div>
+
+                        <div class="table-card">
+                            <div class="table-card-header">
+                                <h5>Insumos necesarios</h5>
+                                <span id="costo-total" style="font-weight:700;color:var(--ohana-dark);font-size:.9rem"></span>
+                            </div>
+                            <table>
+                                <thead><tr><th>Insumo</th><th>Necesario</th><th>Stock actual</th><th>Estado</th><th>Costo est.</th></tr></thead>
+                                <tbody id="tbl-calculo">
+                                    <tr><td colspan="5" style="text-align:center;padding:1.5rem;color:#9ca3af">Selecciona una receta</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="panel-vacio" style="text-align:center;padding:3rem;color:#9ca3af">
+                        <p style="margin-top:.5rem">Selecciona una receta para calcular insumos.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Nueva receta -->
+<div class="modal-overlay" id="modal-receta">
+    <div class="modal-box" style="max-width:560px">
+        <div class="modal-header">
+            <h4>Nueva Receta</h4>
+            <button class="modal-close" onclick="closeModal('modal-receta')">&#x2715;</button>
+        </div>
+        <form id="form-receta" onsubmit="guardarReceta(event)">
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:.75rem">
+                <div class="form-group">
+                    <label>Nombre de la receta *</label>
+                    <input type="text" id="rec-nombre" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Porciones base</label>
+                    <input type="number" id="rec-porciones" class="form-control" min="0.1" step="0.1" value="1">
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label>Descripcion</label>
+                    <textarea id="rec-desc" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+            <div style="border-top:1px solid #e5e7eb;padding-top:.75rem;margin-top:.1rem">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+                    <strong style="font-size:.875rem">Ingredientes</strong>
+                    <button type="button" class="btn-outline" style="padding:.3rem .6rem;font-size:.8rem" onclick="agregarIngrediente()">+ Agregar</button>
+                </div>
+                <div id="ingredientes-form"></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.75rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-receta')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar receta</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script>
+let recetas = [], productos = [], recetaSelId = null;
+
+async function cargar() {
+    [recetas, productos] = await Promise.all([api.get('/api/recetas'), api.get('/api/productos')]);
+    renderLista();
+}
+
+function renderLista() {
+    const cont = document.getElementById('lista-recetas');
+    cont.innerHTML = recetas.length
+        ? recetas.map(r => `
+            <div onclick="seleccionarReceta(${r.id})" id="card-receta-${r.id}" class="receta-card"
+                 style="padding:.6rem .875rem;border-radius:5px;cursor:pointer;margin-bottom:.25rem;border:1.5px solid transparent;transition:.1s">
+                <strong style="font-size:.875rem">${r.nombre}</strong>
+                <div style="font-size:.75rem;color:#9ca3af">${r.porciones} porciones base</div>
+            </div>`).join('')
+        : '<p style="color:#9ca3af;padding:.5rem;font-size:.85rem">Sin recetas aun.</p>';
+}
+
+async function seleccionarReceta(id) {
+    recetaSelId = id;
+    document.querySelectorAll('.receta-card').forEach(c => c.style.borderColor = 'transparent');
+    const card = document.getElementById(`card-receta-${id}`);
+    if (card) card.style.borderColor = 'var(--ohana-secondary)';
+    const r = recetas.find(x => x.id === id);
+    document.getElementById('nombre-receta-sel').textContent = r.nombre;
+    document.getElementById('label-porciones').textContent   = `de ${r.porciones}`;
+    document.getElementById('porciones-calc').value          = r.porciones;
+    document.getElementById('panel-vacio').style.display    = 'none';
+    document.getElementById('panel-calcular').style.display = 'block';
+    lucide.createIcons();
+    await calcular();
+}
+
+async function calcular() {
+    if (!recetaSelId) return;
+    const porciones = parseFloat(document.getElementById('porciones-calc').value) || 1;
+    const res = await api.get(`/api/recetas/${recetaSelId}/calcular?porciones=${porciones}`);
+    document.getElementById('costo-total').textContent = `Costo: ${fmt(res.costo_total)}`;
+    document.getElementById('tbl-calculo').innerHTML = (res.ingredientes||[]).length
+        ? res.ingredientes.map(i => `
+            <tr>
+                <td>${i.producto}</td>
+                <td><strong>${i.cantidad_necesaria}</strong> ${i.unidad}</td>
+                <td>${i.stock_actual} ${i.unidad}</td>
+                <td>${i.suficiente
+                    ? '<span class="badge badge-green">Suficiente</span>'
+                    : '<span class="badge badge-red">Sin stock</span>'}</td>
+                <td>${fmt(i.costo)}</td>
+            </tr>`).join('')
+        : '<tr><td colspan="5" style="text-align:center;padding:1rem;color:#9ca3af">Sin ingredientes</td></tr>';
+}
+
+function abrirModalReceta() {
+    document.getElementById('form-receta').reset();
+    document.getElementById('ingredientes-form').innerHTML = '';
+    openModal('modal-receta');
+}
+
+function agregarIngrediente() {
+    const opts = productos.map(p => `<option value="${p.id}">${p.nombre} (${p.unidad})</option>`).join('');
+    const div  = document.createElement('div');
+    div.style  = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
+    div.innerHTML = `
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Ingrediente</label>
+            <select class="form-control ing-prod">${opts}</select>
+        </div>
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Cantidad</label>
+            <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="1" required>
+        </div>
+        <button type="button" onclick="this.parentElement.remove()" style="padding:.4rem .5rem;border:1px solid #e5e7eb;background:#fff;border-radius:5px;cursor:pointer;color:#6b7280;margin-bottom:1px">&#x2715;</button>`;
+    document.getElementById('ingredientes-form').appendChild(div);
+}
+
+async function guardarReceta(e) {
+    e.preventDefault();
+    const ingredientes = [...document.querySelectorAll('#ingredientes-form > div')].map(d => ({
+        producto_id: d.querySelector('.ing-prod').value,
+        cantidad:    parseFloat(d.querySelector('.ing-cant').value)
+    }));
+    const res = await api.post('/api/recetas', {
+        nombre:      document.getElementById('rec-nombre').value,
+        descripcion: document.getElementById('rec-desc').value,
+        porciones:   parseFloat(document.getElementById('rec-porciones').value) || 1,
+        ingredientes
+    });
+    if (res.ok) { closeModal('modal-receta'); toast('Receta guardada'); await cargar(); }
+    else toast(res.error || 'Error', 'error');
+}
+
+async function eliminarRecetaSel() {
+    if (!recetaSelId || !confirmar('Eliminar esta receta?')) return;
+    await api.delete(`/api/recetas/${recetaSelId}`);
+    recetaSelId = null;
+    document.getElementById('panel-calcular').style.display = 'none';
+    document.getElementById('panel-vacio').style.display    = 'block';
+    toast('Receta eliminada');
+    await cargar();
+}
+
+cargar();
+</script>
+</body>
+</html>

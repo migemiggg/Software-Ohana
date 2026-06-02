@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Inventario</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-name">OhanApp</span>
+            <small>Ohana&reg; &middot; Panel de control</small>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Inventario</h3>
+            <div style="display:flex;gap:.5rem">
+                <button class="btn-outline" onclick="openModal('modal-movimiento')">
+                    <i data-lucide="arrow-up-down"></i> Movimiento
+                </button>
+                <button class="btn-ohana" onclick="abrirFormProducto()">
+                    <i data-lucide="plus"></i> Nuevo producto
+                </button>
+            </div>
+        </div>
+
+        <div class="page-body">
+            <div id="alertas-bar" style="display:none" class="alert alert-warning">
+                <i data-lucide="alert-triangle"></i>
+                <strong id="alertas-count">0</strong> producto(s) con stock por debajo del minimo.
+            </div>
+
+            <div style="display:flex;gap:.6rem;margin-bottom:.875rem;align-items:center">
+                <input type="text" id="buscar" class="form-control" placeholder="Buscar producto..." style="max-width:260px" oninput="filtrar()">
+                <select id="filtro-cat" class="form-control" style="max-width:190px" onchange="filtrar()">
+                    <option value="">Todas las categorias</option>
+                </select>
+                <label style="font-size:.825rem;color:#6b7280;display:flex;align-items:center;gap:.35rem;cursor:pointer">
+                    <input type="checkbox" id="solo-alertas" onchange="filtrar()"> Solo stock bajo
+                </label>
+            </div>
+
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Producto</th><th>Categoria</th><th>Unidad</th>
+                            <th>Stock actual</th><th>Stock minimo</th><th>Precio unit.</th><th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbl-productos">
+                        <tr><td colspan="7" style="text-align:center;padding:2rem;color:#9ca3af">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Producto -->
+<div class="modal-overlay" id="modal-producto">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h4 id="modal-prod-titulo">Nuevo Producto</h4>
+            <button class="modal-close" onclick="closeModal('modal-producto')">&#x2715;</button>
+        </div>
+        <form id="form-producto" onsubmit="guardarProducto(event)">
+            <input type="hidden" id="prod-id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="form-group" style="grid-column:1/-1">
+                    <label>Nombre *</label>
+                    <input type="text" id="prod-nombre" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Categoria</label>
+                    <select id="prod-categoria" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label>Unidad *</label>
+                    <select id="prod-unidad" class="form-control">
+                        <option>pza</option><option>kg</option><option>lt</option>
+                        <option>caja</option><option>bolsa</option><option>g</option><option>ml</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Stock actual</label>
+                    <input type="number" id="prod-stock" class="form-control" min="0" step="0.01" value="0">
+                </div>
+                <div class="form-group">
+                    <label>Stock minimo</label>
+                    <input type="number" id="prod-minimo" class="form-control" min="0" step="0.01" value="0">
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label>Precio unitario ($)</label>
+                    <input type="number" id="prod-precio" class="form-control" min="0" step="0.01" value="0">
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label>Descripcion</label>
+                    <textarea id="prod-desc" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-producto')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Movimiento -->
+<div class="modal-overlay" id="modal-movimiento">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h4>Registrar Movimiento</h4>
+            <button class="modal-close" onclick="closeModal('modal-movimiento')">&#x2715;</button>
+        </div>
+        <form id="form-movimiento" onsubmit="guardarMovimiento(event)">
+            <div class="form-group">
+                <label>Producto *</label>
+                <select id="mov-producto" class="form-control" required></select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="form-group">
+                    <label>Tipo *</label>
+                    <select id="mov-tipo" class="form-control">
+                        <option value="entrada">Entrada (+)</option>
+                        <option value="salida">Salida (-)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Cantidad *</label>
+                    <input type="number" id="mov-cantidad" class="form-control" min="0.01" step="0.01" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Motivo</label>
+                <input type="text" id="mov-motivo" class="form-control" placeholder="Ej: compra semanal, uso en produccion...">
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-movimiento')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Registrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script>
+let productos = [];
+
+async function cargar() {
+    const [prods, cats, alertas] = await Promise.all([
+        api.get('/api/productos'), api.get('/api/categorias'), api.get('/api/alertas/stock')
+    ]);
+    productos = prods;
+    if (alertas.length) {
+        document.getElementById('alertas-bar').style.display = 'flex';
+        document.getElementById('alertas-count').textContent = alertas.length;
+        lucide.createIcons();
+    }
+    const catOpts = cats.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+    document.getElementById('filtro-cat').innerHTML = '<option value="">Todas las categorias</option>' + catOpts;
+    document.getElementById('prod-categoria').innerHTML = '<option value="">Sin categoria</option>' + catOpts;
+    document.getElementById('mov-producto').innerHTML = prods.map(p =>
+        `<option value="${p.id}">${p.nombre} (${p.stock_actual} ${p.unidad})</option>`).join('');
+    filtrar();
+}
+
+function filtrar() {
+    const q    = document.getElementById('buscar').value.toLowerCase();
+    const cat  = document.getElementById('filtro-cat').value;
+    const alrt = document.getElementById('solo-alertas').checked;
+    const vis  = productos.filter(p => {
+        return p.nombre.toLowerCase().includes(q)
+            && (!cat  || String(p.categoria_id) === cat)
+            && (!alrt || p.stock_actual <= p.stock_minimo);
+    });
+    const tbody = document.getElementById('tbl-productos');
+    tbody.innerHTML = vis.length ? vis.map(p => {
+        const bajo = p.stock_actual <= p.stock_minimo;
+        return `<tr>
+            <td><strong>${p.nombre}</strong>${p.descripcion ? `<br><small style="color:#9ca3af">${p.descripcion}</small>` : ''}</td>
+            <td>${p.categoria || '&mdash;'}</td>
+            <td>${p.unidad}</td>
+            <td>${bajo ? `<span class="badge badge-red">${p.stock_actual}</span>` : p.stock_actual}</td>
+            <td>${p.stock_minimo}</td>
+            <td>${fmt(p.precio_unitario)}</td>
+            <td style="display:flex;gap:.35rem">
+                <button class="btn-icon" title="Editar" onclick="editarProducto(${p.id})"><i data-lucide="pencil"></i></button>
+                <button class="btn-icon danger" title="Eliminar" onclick="eliminarProducto(${p.id})"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#9ca3af">Sin resultados</td></tr>';
+    lucide.createIcons();
+}
+
+function abrirFormProducto() {
+    document.getElementById('form-producto').reset();
+    document.getElementById('prod-id').value = '';
+    document.getElementById('modal-prod-titulo').textContent = 'Nuevo Producto';
+    openModal('modal-producto');
+}
+
+async function editarProducto(id) {
+    const p = await api.get(`/api/productos/${id}`);
+    document.getElementById('prod-id').value        = p.id;
+    document.getElementById('prod-nombre').value    = p.nombre;
+    document.getElementById('prod-categoria').value = p.categoria_id || '';
+    document.getElementById('prod-unidad').value    = p.unidad;
+    document.getElementById('prod-stock').value     = p.stock_actual;
+    document.getElementById('prod-minimo').value    = p.stock_minimo;
+    document.getElementById('prod-precio').value    = p.precio_unitario;
+    document.getElementById('prod-desc').value      = p.descripcion || '';
+    document.getElementById('modal-prod-titulo').textContent = 'Editar Producto';
+    openModal('modal-producto');
+}
+
+async function guardarProducto(e) {
+    e.preventDefault();
+    const id   = document.getElementById('prod-id').value;
+    const data = {
+        nombre:          document.getElementById('prod-nombre').value,
+        categoria_id:    document.getElementById('prod-categoria').value || null,
+        unidad:          document.getElementById('prod-unidad').value,
+        stock_actual:    parseFloat(document.getElementById('prod-stock').value),
+        stock_minimo:    parseFloat(document.getElementById('prod-minimo').value),
+        precio_unitario: parseFloat(document.getElementById('prod-precio').value),
+        descripcion:     document.getElementById('prod-desc').value
+    };
+    const res = id ? await api.put(`/api/productos/${id}`, data) : await api.post('/api/productos', data);
+    if (res.ok) { closeModal('modal-producto'); toast('Producto guardado'); await cargar(); }
+    else toast(res.error || 'Error', 'error');
+}
+
+async function eliminarProducto(id) {
+    if (!confirmar('Eliminar este producto?')) return;
+    await api.delete(`/api/productos/${id}`);
+    toast('Producto eliminado');
+    await cargar();
+}
+
+async function guardarMovimiento(e) {
+    e.preventDefault();
+    const res = await api.post('/api/movimientos', {
+        producto_id: document.getElementById('mov-producto').value,
+        tipo:        document.getElementById('mov-tipo').value,
+        cantidad:    parseFloat(document.getElementById('mov-cantidad').value),
+        motivo:      document.getElementById('mov-motivo').value
+    });
+    if (res.ok) { closeModal('modal-movimiento'); toast(`Stock actualizado: ${res.stock_nuevo} unidades`); await cargar(); }
+    else toast(res.error || 'Error', 'error');
+}
+
+cargar();
+</script>
+</body>
+</html>

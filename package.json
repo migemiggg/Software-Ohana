@@ -1,0 +1,19 @@
+{
+  "name": "ohanaapp",
+  "version": "1.0.0",
+  "description": "Sistema de administracion para Ohana",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "sql.js": "^1.12.0",
+    "bcryptjs": "^2.4.3",
+    "express-session": "^1.18.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}

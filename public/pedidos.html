@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Pedidos</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-name">OhanApp</span>
+            <small>Ohana&reg; &middot; Panel de control</small>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Pedidos</h3>
+            <button class="btn-ohana" onclick="openModal('modal-pedido')">
+                <i data-lucide="plus"></i> Nuevo pedido
+            </button>
+        </div>
+
+        <div class="page-body">
+            <div style="display:flex;gap:.4rem;margin-bottom:.875rem;flex-wrap:wrap">
+                <button class="btn-outline filtro-btn active" onclick="setFiltro(this,'')">Todos</button>
+                <button class="btn-outline filtro-btn" onclick="setFiltro(this,'pendiente')">Pendientes</button>
+                <button class="btn-outline filtro-btn" onclick="setFiltro(this,'en_proceso')">En proceso</button>
+                <button class="btn-outline filtro-btn" onclick="setFiltro(this,'entregado')">Entregados</button>
+                <button class="btn-outline filtro-btn" onclick="setFiltro(this,'cancelado')">Cancelados</button>
+            </div>
+
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>Cliente</th><th>Contacto</th><th>Estado</th><th>Total</th><th>Pedido</th><th>Entrega</th><th>Acciones</th></tr>
+                    </thead>
+                    <tbody id="tbl-pedidos">
+                        <tr><td colspan="8" style="text-align:center;padding:2rem;color:#9ca3af">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Nuevo pedido -->
+<div class="modal-overlay" id="modal-pedido">
+    <div class="modal-box" style="max-width:620px">
+        <div class="modal-header">
+            <h4>Nuevo Pedido</h4>
+            <button class="modal-close" onclick="closeModal('modal-pedido')">&#x2715;</button>
+        </div>
+        <form id="form-pedido" onsubmit="guardarPedido(event)">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="form-group">
+                    <label>Cliente *</label>
+                    <input type="text" id="ped-cliente" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Contacto</label>
+                    <input type="text" id="ped-contacto" class="form-control" placeholder="Tel / WhatsApp">
+                </div>
+                <div class="form-group">
+                    <label>Fecha de entrega</label>
+                    <input type="date" id="ped-entrega" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Notas</label>
+                    <input type="text" id="ped-notas" class="form-control" placeholder="Indicaciones especiales...">
+                </div>
+            </div>
+            <div style="border-top:1px solid #e5e7eb;padding-top:.75rem;margin-top:.1rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+                    <strong style="font-size:.875rem">Productos del pedido</strong>
+                    <button type="button" class="btn-outline" style="padding:.3rem .6rem;font-size:.8rem" onclick="agregarLinea()">+ Agregar</button>
+                </div>
+                <div id="lineas-pedido"></div>
+                <div style="text-align:right;margin-top:.5rem;font-weight:700;color:var(--ohana-dark)">
+                    Total: <span id="total-pedido">$0.00</span>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.75rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-pedido')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar pedido</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Detalle -->
+<div class="modal-overlay" id="modal-detalle">
+    <div class="modal-box" style="max-width:560px">
+        <div class="modal-header">
+            <h4>Detalle del Pedido</h4>
+            <button class="modal-close" onclick="closeModal('modal-detalle')">&#x2715;</button>
+        </div>
+        <div id="detalle-contenido"></div>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script>
+let todosPedidos = [], productosDisp = [], filtroEstado = '';
+
+async function cargar() {
+    [todosPedidos, productosDisp] = await Promise.all([
+        api.get('/api/pedidos'), api.get('/api/productos')
+    ]);
+    renderTabla();
+}
+
+function setFiltro(btn, estado) {
+    document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filtroEstado = estado;
+    renderTabla();
+}
+
+function renderTabla() {
+    const lista  = filtroEstado ? todosPedidos.filter(p => p.estado === filtroEstado) : todosPedidos;
+    const tbody  = document.getElementById('tbl-pedidos');
+    tbody.innerHTML = lista.length ? lista.map(p => `
+        <tr>
+            <td><strong>#${p.id}</strong></td>
+            <td>${p.cliente_nombre}</td>
+            <td style="color:#6b7280;font-size:.8rem">${p.cliente_contacto || '&mdash;'}</td>
+            <td>${estadoBadge(p.estado)}</td>
+            <td><strong>${fmt(p.total)}</strong></td>
+            <td>${fmtFecha(p.fecha_pedido)}</td>
+            <td>${fmtFecha(p.fecha_entrega)}</td>
+            <td style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
+                <button class="btn-icon" title="Ver detalle" onclick="verDetalle(${p.id})"><i data-lucide="eye"></i></button>
+                <select onchange="cambiarEstado(${p.id},this.value)" class="form-control" style="padding:.2rem .35rem;font-size:.75rem;width:auto;height:auto">
+                    ${['pendiente','en_proceso','entregado','cancelado'].map(e =>
+                        `<option value="${e}" ${p.estado===e?'selected':''}>${e.replace('_',' ')}</option>`
+                    ).join('')}
+                </select>
+                <button class="btn-icon danger" title="Eliminar" onclick="eliminarPedido(${p.id})"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>`).join('')
+    : '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#9ca3af">Sin pedidos</td></tr>';
+    lucide.createIcons();
+}
+
+function agregarLinea() {
+    const opts = productosDisp.map(p => `<option value="${p.id}" data-precio="${p.precio_unitario}">${p.nombre}</option>`).join('');
+    const div  = document.createElement('div');
+    div.className = 'linea-pedido';
+    div.style = 'display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
+    div.innerHTML = `
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Producto</label>
+            <select class="form-control lin-prod" onchange="actualizarPrecio(this)">${opts}</select>
+        </div>
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Cantidad</label>
+            <input type="number" class="form-control lin-cant" min="1" value="1" step="0.01" oninput="calcularTotal()">
+        </div>
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Precio</label>
+            <input type="number" class="form-control lin-precio" min="0" step="0.01" value="${productosDisp[0]?.precio_unitario||0}" oninput="calcularTotal()">
+        </div>
+        <button type="button" onclick="this.parentElement.remove();calcularTotal()" style="margin-bottom:1px;padding:.4rem .5rem;border:1px solid #e5e7eb;background:#fff;border-radius:6px;cursor:pointer;color:#6b7280">&#x2715;</button>`;
+    document.getElementById('lineas-pedido').appendChild(div);
+    calcularTotal();
+}
+
+function actualizarPrecio(sel) {
+    sel.closest('.linea-pedido').querySelector('.lin-precio').value = sel.options[sel.selectedIndex].dataset.precio || 0;
+    calcularTotal();
+}
+
+function calcularTotal() {
+    let total = 0;
+    document.querySelectorAll('.linea-pedido').forEach(l => {
+        total += parseFloat(l.querySelector('.lin-cant').value||0) * parseFloat(l.querySelector('.lin-precio').value||0);
+    });
+    document.getElementById('total-pedido').textContent = fmt(total);
+}
+
+async function guardarPedido(e) {
+    e.preventDefault();
+    const lineas = [...document.querySelectorAll('.linea-pedido')].map(l => ({
+        producto_id: l.querySelector('.lin-prod').value,
+        cantidad:    parseFloat(l.querySelector('.lin-cant').value),
+        precio:      parseFloat(l.querySelector('.lin-precio').value)
+    }));
+    if (!lineas.length) { toast('Agrega al menos un producto', 'warn'); return; }
+    const res = await api.post('/api/pedidos', {
+        cliente_nombre:   document.getElementById('ped-cliente').value,
+        cliente_contacto: document.getElementById('ped-contacto').value,
+        fecha_entrega:    document.getElementById('ped-entrega').value || null,
+        notas:            document.getElementById('ped-notas').value,
+        detalles:         lineas
+    });
+    if (res.ok) {
+        closeModal('modal-pedido');
+        document.getElementById('form-pedido').reset();
+        document.getElementById('lineas-pedido').innerHTML = '';
+        toast('Pedido guardado');
+        await cargar();
+    } else toast(res.error || 'Error', 'error');
+}
+
+async function cambiarEstado(id, estado) {
+    await api.patch(`/api/pedidos/${id}/estado`, { estado });
+    toast('Estado actualizado');
+    await cargar();
+}
+
+async function verDetalle(id) {
+    const p = await api.get(`/api/pedidos/${id}`);
+    document.getElementById('detalle-contenido').innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem;font-size:.875rem">
+            <div><strong>Cliente:</strong> ${p.cliente_nombre}</div>
+            <div><strong>Contacto:</strong> ${p.cliente_contacto||'&mdash;'}</div>
+            <div><strong>Estado:</strong> ${estadoBadge(p.estado)}</div>
+            <div><strong>Pedido:</strong> ${fmtFecha(p.fecha_pedido)}</div>
+            <div><strong>Entrega:</strong> ${fmtFecha(p.fecha_entrega)}</div>
+            <div><strong>Total:</strong> <strong>${fmt(p.total)}</strong></div>
+            ${p.notas ? `<div style="grid-column:1/-1"><strong>Notas:</strong> ${p.notas}</div>` : ''}
+        </div>
+        <table>
+            <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead>
+            <tbody>${(p.detalles||[]).map(d => `
+                <tr>
+                    <td>${d.producto_nombre}</td>
+                    <td>${d.cantidad} ${d.unidad}</td>
+                    <td>${fmt(d.precio)}</td>
+                    <td>${fmt(d.cantidad*d.precio)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>`;
+    openModal('modal-detalle');
+}
+
+async function eliminarPedido(id) {
+    if (!confirmar('Eliminar este pedido?')) return;
+    await api.delete(`/api/pedidos/${id}`);
+    toast('Pedido eliminado');
+    await cargar();
+}
+
+cargar();
+</script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Recordatorios</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-name">OhanApp</span>
+            <small>Ohana&reg; &middot; Panel de control</small>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Recordatorios</h3>
+            <button class="btn-ohana" onclick="abrirModal()">
+                <i data-lucide="plus"></i> Nuevo recordatorio
+            </button>
+        </div>
+
+        <div class="page-body">
+            <div style="display:flex;gap:.4rem;margin-bottom:.875rem">
+                <button class="btn-outline filtro-btn active" onclick="setFiltro(this,'todos')">Todos</button>
+                <button class="btn-outline filtro-btn" onclick="setFiltro(this,'pendiente')">Pendientes</button>
+                <button class="btn-outline filtro-btn" onclick="setFiltro(this,'completado')">Completados</button>
+            </div>
+
+            <div id="lista-recordatorios" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:.875rem">
+                <p style="color:#9ca3af">Cargando...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-rec">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h4 id="modal-rec-titulo">Nuevo Recordatorio</h4>
+            <button class="modal-close" onclick="closeModal('modal-rec')">&#x2715;</button>
+        </div>
+        <form id="form-rec" onsubmit="guardar(event)">
+            <input type="hidden" id="rec-id">
+            <div class="form-group">
+                <label>Titulo *</label>
+                <input type="text" id="rec-titulo" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Descripcion</label>
+                <textarea id="rec-desc" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Fecha *</label>
+                <input type="datetime-local" id="rec-fecha" class="form-control" required>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-rec')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script>
+let todos = [], filtro = 'todos';
+
+async function cargar() {
+    todos = await api.get('/api/recordatorios');
+    render();
+}
+
+function setFiltro(btn, f) {
+    document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filtro = f;
+    render();
+}
+
+function render() {
+    const lista = todos.filter(r => {
+        if (filtro === 'pendiente')  return !r.completado;
+        if (filtro === 'completado') return  r.completado;
+        return true;
+    });
+
+    const cont = document.getElementById('lista-recordatorios');
+    if (!lista.length) {
+        cont.innerHTML = '<p style="color:#9ca3af;font-size:.875rem">Sin recordatorios en esta categoria.</p>';
+        return;
+    }
+
+    cont.innerHTML = lista.map(r => {
+        const vencido = !r.completado && new Date(r.fecha.replace(' ','T')) < new Date();
+        const borde   = r.completado ? '#d1fae5' : vencido ? '#fca5a5' : '#e5e7eb';
+        return `
+        <div style="background:#fff;border-radius:6px;padding:1rem;border:1px solid ${borde};opacity:${r.completado?.7:1}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+                <div style="flex:1;min-width:0">
+                    <strong style="font-size:.9rem;${r.completado?'text-decoration:line-through;color:#9ca3af':''}">${r.titulo}</strong>
+                    ${r.descripcion ? `<p style="color:#6b7280;font-size:.8rem;margin-top:.25rem">${r.descripcion}</p>` : ''}
+                    <div style="margin-top:.5rem;font-size:.78rem;color:${vencido&&!r.completado?'#dc2626':'#9ca3af'};display:flex;align-items:center;gap:.3rem">
+                        <i data-lucide="calendar" style="width:12px;height:12px"></i>
+                        ${fmtFecha(r.fecha)}
+                        ${vencido&&!r.completado?'<span class="badge badge-red">Vencido</span>':''}
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:.3rem;flex-shrink:0">
+                    <button class="btn-icon" title="${r.completado?'Marcar pendiente':'Completar'}" onclick="toggleCompleto(${r.id})">
+                        <i data-lucide="${r.completado?'rotate-ccw':'check'}"></i>
+                    </button>
+                    <button class="btn-icon" title="Editar" onclick="editar(${r.id})">
+                        <i data-lucide="pencil"></i>
+                    </button>
+                    <button class="btn-icon danger" title="Eliminar" onclick="eliminar(${r.id})">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+    lucide.createIcons();
+}
+
+function abrirModal() {
+    document.getElementById('form-rec').reset();
+    document.getElementById('rec-id').value = '';
+    document.getElementById('modal-rec-titulo').textContent = 'Nuevo Recordatorio';
+    const d = new Date(); d.setHours(d.getHours()+1);
+    document.getElementById('rec-fecha').value = d.toISOString().slice(0,16);
+    openModal('modal-rec');
+}
+
+function editar(id) {
+    const r = todos.find(x => x.id === id);
+    document.getElementById('rec-id').value     = r.id;
+    document.getElementById('rec-titulo').value = r.titulo;
+    document.getElementById('rec-desc').value   = r.descripcion || '';
+    document.getElementById('rec-fecha').value  = r.fecha.replace(' ','T').slice(0,16);
+    document.getElementById('modal-rec-titulo').textContent = 'Editar Recordatorio';
+    openModal('modal-rec');
+}
+
+async function guardar(e) {
+    e.preventDefault();
+    const id   = document.getElementById('rec-id').value;
+    const data = {
+        titulo:      document.getElementById('rec-titulo').value,
+        descripcion: document.getElementById('rec-desc').value,
+        fecha:       document.getElementById('rec-fecha').value
+    };
+    const res = id ? await api.put(`/api/recordatorios/${id}`, data) : await api.post('/api/recordatorios', data);
+    if (res.ok) { closeModal('modal-rec'); toast('Recordatorio guardado'); await cargar(); }
+    else toast(res.error || 'Error', 'error');
+}
+
+async function toggleCompleto(id) {
+    await api.patch(`/api/recordatorios/${id}/toggle`, {});
+    await cargar();
+}
+
+async function eliminar(id) {
+    if (!confirmar()) return;
+    await api.delete(`/api/recordatorios/${id}`);
+    toast('Eliminado');
+    await cargar();
+}
+
+cargar();
+</script>
+</body>
+</html>

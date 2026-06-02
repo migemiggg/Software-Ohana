@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Empleados</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-name">OhanApp</span>
+            <small>Ohana&reg; &middot; Panel de control</small>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Empleados</h3>
+            <button class="btn-ohana" onclick="abrirModal()">
+                <i data-lucide="user-plus"></i> Nuevo empleado
+            </button>
+        </div>
+
+        <div class="page-body">
+
+            <!-- Filtros -->
+            <div style="display:flex;gap:.6rem;margin-bottom:.875rem;align-items:center;flex-wrap:wrap">
+                <input type="text" id="buscar" class="form-control" placeholder="Buscar por nombre o correo..."
+                       style="max-width:260px" oninput="filtrar()">
+                <div style="display:flex;gap:.4rem">
+                    <button class="btn-outline filtro-rol active" data-rol="" onclick="setRol(this,'')">Todos</button>
+                    <button class="btn-outline filtro-rol" data-rol="admin" onclick="setRol(this,'admin')">Admin</button>
+                    <button class="btn-outline filtro-rol" data-rol="empleado" onclick="setRol(this,'empleado')">Empleados</button>
+                    <button class="btn-outline filtro-rol" data-rol="proveedor" onclick="setRol(this,'proveedor')">Proveedores</button>
+                </div>
+                <label style="font-size:.825rem;color:#6b7280;display:flex;align-items:center;gap:.35rem;cursor:pointer;margin-left:auto">
+                    <input type="checkbox" id="solo-activos" checked onchange="filtrar()"> Solo activos
+                </label>
+            </div>
+
+            <!-- Resumen de roles -->
+            <div style="display:flex;gap:.6rem;margin-bottom:1rem" id="resumen-roles"></div>
+
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Correo</th>
+                            <th>Telefono</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                            <th>Alta</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbl-empleados">
+                        <tr><td colspan="7" style="text-align:center;padding:2rem;color:#9ca3af">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Empleado -->
+<div class="modal-overlay" id="modal-emp">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h4 id="modal-emp-titulo">Nuevo Empleado</h4>
+            <button class="modal-close" onclick="closeModal('modal-emp')">&#x2715;</button>
+        </div>
+        <form id="form-emp" onsubmit="guardar(event)">
+            <input type="hidden" id="emp-id">
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" id="emp-nombre" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Apellido</label>
+                    <input type="text" id="emp-apellido" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Correo * <span style="font-weight:400;color:#71717A">(se usa para iniciar sesión)</span></label>
+                    <input type="email" id="emp-correo" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Telefono</label>
+                    <input type="tel" id="emp-telefono" class="form-control" placeholder="Ej: 667-123-4567">
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label>Rol *</label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.25rem" id="rol-selector">
+                        <label class="rol-opcion" data-rol="empleado">
+                            <input type="radio" name="rol" value="empleado" checked>
+                            <div class="rol-card">
+                                <i data-lucide="user"></i>
+                                <span>Empleado</span>
+                                <small>Operacion general</small>
+                            </div>
+                        </label>
+                        <label class="rol-opcion" data-rol="proveedor">
+                            <input type="radio" name="rol" value="proveedor">
+                            <div class="rol-card">
+                                <i data-lucide="truck"></i>
+                                <span>Proveedor</span>
+                                <small>Suministro de insumos</small>
+                            </div>
+                        </label>
+                        <label class="rol-opcion" data-rol="admin">
+                            <input type="radio" name="rol" value="admin">
+                            <div class="rol-card">
+                                <i data-lucide="shield"></i>
+                                <span>Admin</span>
+                                <small>Acceso completo</small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" id="grupo-contrasena">
+                    <label id="lbl-contrasena">Contraseña *</label>
+                    <input type="password" id="emp-contrasena" class="form-control" placeholder="Mínimo 6 caracteres">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar contraseña <span id="lbl-conf-req">*</span></label>
+                    <input type="password" id="emp-contrasena2" class="form-control" placeholder="Repetir contraseña">
+                </div>
+                <div class="form-group" style="grid-column:1/-1">
+                    <label>Notas</label>
+                    <textarea id="emp-notas" class="form-control" rows="2" placeholder="Turno, area, observaciones..."></textarea>
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-emp')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<style>
+.rol-opcion input[type="radio"] { display: none; }
+.rol-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
+    padding: .625rem .5rem;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .1s, background .1s;
+    font-size: .8rem;
+}
+.rol-card svg { width: 18px; height: 18px; stroke-width: 1.75; color: #6b7280; }
+.rol-card span { font-weight: 600; color: var(--ohana-text); }
+.rol-card small { color: #9ca3af; font-size: .7rem; }
+.rol-opcion input:checked + .rol-card {
+    border-color: var(--ohana-secondary);
+    background: var(--ohana-light);
+}
+.rol-opcion input:checked + .rol-card svg { color: var(--ohana-primary); }
+</style>
+<script>
+let empleados = [], rolFiltro = '';
+
+async function cargar() {
+    empleados = await api.get('/api/empleados');
+    actualizarResumen();
+    filtrar();
+}
+
+function actualizarResumen() {
+    const total     = empleados.length;
+    const admins    = empleados.filter(e => e.rol === 'admin').length;
+    const emps      = empleados.filter(e => e.rol === 'empleado').length;
+    const provs     = empleados.filter(e => e.rol === 'proveedor').length;
+    document.getElementById('resumen-roles').innerHTML = `
+        <span style="font-size:.8rem;color:#6b7280;display:flex;align-items:center;gap:.3rem">
+            <strong>${total}</strong> registros &mdash;
+            <span class="badge role-admin">${admins} admin</span>
+            <span class="badge role-empleado">${emps} empleados</span>
+            <span class="badge role-proveedor">${provs} proveedores</span>
+        </span>`;
+}
+
+function setRol(btn, rol) {
+    document.querySelectorAll('.filtro-rol').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    rolFiltro = rol;
+    filtrar();
+}
+
+function filtrar() {
+    const q      = document.getElementById('buscar').value.toLowerCase();
+    const activo = document.getElementById('solo-activos').checked;
+    const lista  = empleados.filter(e => {
+        const texto = `${e.nombre} ${e.apellido||''} ${e.correo||''}`.toLowerCase();
+        return texto.includes(q)
+            && (!rolFiltro || e.rol === rolFiltro)
+            && (!activo   || e.activo === 1);
+    });
+
+    const tbody = document.getElementById('tbl-empleados');
+    if (!lista.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#9ca3af">Sin resultados</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = lista.map(e => `
+        <tr style="${!e.activo?'opacity:.55':''}">
+            <td>
+                <div style="display:flex;align-items:center;gap:.5rem">
+                    <div style="width:28px;height:28px;border-radius:50%;background:var(--ohana-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.75rem;flex-shrink:0">
+                        ${e.nombre.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <strong>${e.nombre}${e.apellido?' '+e.apellido:''}</strong>
+                        ${e.notas ? `<div style="font-size:.75rem;color:#9ca3af">${e.notas}</div>` : ''}
+                    </div>
+                </div>
+            </td>
+            <td style="font-size:.835rem">
+                ${e.correo
+                    ? `<span style="color:#18181B">${e.correo}</span>`
+                    : '<span style="color:#A1A1AA;font-style:italic">Sin correo</span>'}
+            </td>
+            <td style="color:#71717A;font-size:.835rem">${e.telefono || '—'}</td>
+            <td>${rolBadge(e.rol)}</td>
+            <td>
+                <div style="display:flex;flex-direction:column;gap:.2rem">
+                    <span class="badge ${e.activo ? 'badge-green' : 'badge-gray'}">
+                        ${e.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                    <span class="badge ${e.correo ? 'badge-blue' : 'badge-gray'}" style="font-size:.65rem">
+                        ${e.correo ? 'Puede iniciar sesión' : 'Sin acceso'}
+                    </span>
+                </div>
+            </td>
+            <td style="color:#9ca3af;font-size:.8rem">${fmtFecha(e.creado_en)}</td>
+            <td style="display:flex;gap:.3rem">
+                <button class="btn-icon" title="Editar" onclick="editar(${e.id})"><i data-lucide="pencil"></i></button>
+                <button class="btn-icon" title="${e.activo?'Desactivar':'Activar'}" onclick="toggleActivo(${e.id})">
+                    <i data-lucide="${e.activo?'user-x':'user-check'}"></i>
+                </button>
+                <button class="btn-icon danger" title="Eliminar" onclick="eliminar(${e.id})"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>`).join('');
+    lucide.createIcons();
+}
+
+function abrirModal() {
+    document.getElementById('form-emp').reset();
+    document.getElementById('emp-id').value = '';
+    document.getElementById('modal-emp-titulo').textContent = 'Nuevo Empleado';
+    // Default radio: empleado
+    document.querySelector('input[name="rol"][value="empleado"]').checked = true;
+    // En nuevo: correo y contraseña requeridos
+    document.getElementById('emp-correo').required = true;
+    document.getElementById('emp-contrasena').required = true;
+    document.getElementById('emp-contrasena2').required = true;
+    document.getElementById('lbl-contrasena').textContent = 'Contraseña *';
+    document.getElementById('lbl-conf-req').style.display = '';
+    openModal('modal-emp');
+    lucide.createIcons();
+}
+
+function editar(id) {
+    const e = empleados.find(x => x.id === id);
+    document.getElementById('emp-id').value       = e.id;
+    document.getElementById('emp-nombre').value   = e.nombre;
+    document.getElementById('emp-apellido').value = e.apellido || '';
+    document.getElementById('emp-correo').value   = e.correo   || '';
+    document.getElementById('emp-telefono').value = e.telefono || '';
+    document.getElementById('emp-notas').value    = e.notas    || '';
+    document.getElementById('emp-contrasena').value  = '';
+    document.getElementById('emp-contrasena2').value = '';
+    const radio = document.querySelector(`input[name="rol"][value="${e.rol}"]`);
+    if (radio) radio.checked = true;
+    document.getElementById('modal-emp-titulo').textContent = 'Editar Empleado';
+    // En edición: correo sigue requerido, contraseña opcional
+    document.getElementById('emp-correo').required = true;
+    document.getElementById('emp-contrasena').required = false;
+    document.getElementById('emp-contrasena2').required = false;
+    document.getElementById('lbl-contrasena').textContent = 'Nueva contraseña (dejar vacío para no cambiar)';
+    document.getElementById('lbl-conf-req').style.display = 'none';
+    openModal('modal-emp');
+    lucide.createIcons();
+}
+
+async function guardar(e) {
+    e.preventDefault();
+    const id   = document.getElementById('emp-id').value;
+    const rol  = document.querySelector('input[name="rol"]:checked')?.value || 'empleado';
+    const pwd  = document.getElementById('emp-contrasena').value;
+    const pwd2 = document.getElementById('emp-contrasena2').value;
+
+    // Validar contraseña
+    if (!id && !pwd) return toast('La contraseña es requerida', 'error');
+    if (pwd && pwd.length < 6) return toast('La contraseña debe tener al menos 6 caracteres', 'error');
+    if (pwd && pwd !== pwd2)   return toast('Las contraseñas no coinciden', 'error');
+
+    const data = {
+        nombre:   document.getElementById('emp-nombre').value,
+        apellido: document.getElementById('emp-apellido').value,
+        correo:   document.getElementById('emp-correo').value,
+        telefono: document.getElementById('emp-telefono').value,
+        rol,
+        notas:    document.getElementById('emp-notas').value
+    };
+    if (pwd) data.contrasena = pwd;  // solo si se ingresó
+
+    const res = id
+        ? await api.put(`/api/empleados/${id}`, data)
+        : await api.post('/api/empleados', data);
+    if (res.ok) { closeModal('modal-emp'); toast('Empleado guardado'); await cargar(); }
+    else toast(res.error || 'Error al guardar', 'error');
+}
+
+async function toggleActivo(id) {
+    const res = await api.patch(`/api/empleados/${id}/toggle`, {});
+    toast(res.activo ? 'Empleado activado' : 'Empleado desactivado');
+    await cargar();
+}
+
+async function eliminar(id) {
+    if (!confirmar('Eliminar este empleado permanentemente?')) return;
+    const res = await api.delete(`/api/empleados/${id}`);
+    if (res.ok) { toast('Eliminado'); await cargar(); }
+    else toast(res.error || 'Sin permisos', 'error');
+}
+
+cargar();
+</script>
+</body>
+</html>
