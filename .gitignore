@@ -1,8 +1,4 @@
 node_modules/
-*.db
-*.db-journal
-.env
-.DS_Store
 CHANGELOG.md
 docs/OhanApp_Bocetos_Arquitectura_Cronograma.docx
 docs/OhanApp_Modelo_BaseDatos.docx
