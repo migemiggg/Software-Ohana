@@ -31,6 +31,10 @@ router.post('/api/recetas', (req, res) => {
     const { nombre, descripcion, porciones, ingredientes } = req.body;
     if (!nombre) return res.status(400).json({ error: 'El nombre es requerido.' });
 
+    // Validar que no exista una receta con el mismo nombre
+    const existente = db.prepare('SELECT id FROM recetas WHERE LOWER(nombre) = LOWER(?)').get(nombre);
+    if (existente) return res.status(400).json({ error: 'Ya existe una receta con este nombre.' });
+
     const result = db.transaction(() => {
         const info = db.prepare(`
             INSERT INTO recetas (nombre, descripcion, porciones) VALUES (?, ?, ?)
@@ -48,6 +52,40 @@ router.post('/api/recetas', (req, res) => {
         }
 
         return recetaId;
+    })();
+
+    res.json({ ok: true, id: result });
+});
+
+// Editar receta
+router.put('/api/recetas/:id', (req, res) => {
+    const { nombre, descripcion, porciones, ingredientes } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'El nombre es requerido.' });
+
+    // Validar que no exista otra receta con el mismo nombre
+    const existente = db.prepare('SELECT id FROM recetas WHERE LOWER(nombre) = LOWER(?) AND id != ?')
+        .get(nombre, req.params.id);
+    if (existente) return res.status(400).json({ error: 'Ya existe una receta con este nombre.' });
+
+    const result = db.transaction(() => {
+        db.prepare(`
+            UPDATE recetas SET nombre = ?, descripcion = ?, porciones = ? WHERE id = ?
+        `).run(nombre, descripcion || null, porciones || 1, req.params.id);
+
+        // Eliminar ingredientes anteriores
+        db.prepare('DELETE FROM receta_ingredientes WHERE receta_id = ?').run(req.params.id);
+
+        // Agregar nuevos ingredientes
+        if (ingredientes && ingredientes.length) {
+            const ins = db.prepare(`
+                INSERT INTO receta_ingredientes (receta_id, producto_id, cantidad) VALUES (?, ?, ?)
+            `);
+            for (const ing of ingredientes) {
+                ins.run(req.params.id, ing.producto_id, ing.cantidad);
+            }
+        }
+
+        return req.params.id;
     })();
 
     res.json({ ok: true, id: result });
