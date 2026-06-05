@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Mapa de inventario</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <img src="/img/ohana-logo-circle.png" alt="Ohana">
+            <div>
+                <span class="brand-name">OhanApp</span>
+                <small>Ohana&reg; &middot; Panel de control</small>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/mapa-inventario"><i data-lucide="map-pinned"></i> Mapa inventario</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Mapa de inventario</h3>
+            <div style="display:flex;gap:.5rem;align-items:center">
+                <button class="btn-outline" onclick="usarMiUbicacion()"><i data-lucide="crosshair"></i> Mi ubicacion</button>
+                <button class="btn-outline" onclick="exportarCSV()"><i data-lucide="download"></i> CSV</button>
+                <button class="btn-ohana" onclick="abrirUbicacion()"><i data-lucide="plus"></i> Ubicacion</button>
+                <div class="user-badge">
+                    <div class="avatar" id="avatar-initials">?</div>
+                    <span id="user-name">Cargando...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="page-body map-page">
+            <section class="map-stats">
+                <div class="stat-card"><div class="stat-icon icon-blue"><i data-lucide="map-pin"></i></div><div class="stat-value" id="stat-locations">-</div><div class="stat-label">Ubicaciones</div></div>
+                <div class="stat-card"><div class="stat-icon icon-green"><i data-lucide="boxes"></i></div><div class="stat-value" id="stat-products">-</div><div class="stat-label">Registros de inventario</div></div>
+                <div class="stat-card"><div class="stat-icon icon-yellow"><i data-lucide="package-check"></i></div><div class="stat-value" id="stat-units">-</div><div class="stat-label">Unidades totales</div></div>
+                <div class="stat-card"><div class="stat-icon icon-red"><i data-lucide="tags"></i></div><div class="stat-value" id="stat-categories">-</div><div class="stat-label">Categorias</div></div>
+            </section>
+
+            <section class="map-workspace">
+                <aside class="map-panel">
+                    <div class="map-search">
+                        <input type="text" id="buscar-producto" class="form-control" placeholder="Buscar producto..." oninput="aplicarFiltros()">
+                        <select id="filtro-categoria" class="form-control" onchange="aplicarFiltros()">
+                            <option value="">Todas las categorias</option>
+                        </select>
+                    </div>
+                    <div class="map-results-head">
+                        <strong id="resultado-count">0 ubicaciones</strong>
+                        <button class="btn-outline" onclick="limpiarFiltros()">Limpiar</button>
+                    </div>
+                    <div id="lista-ubicaciones" class="location-list"></div>
+                </aside>
+                <div class="map-shell">
+                    <div id="inventory-map"></div>
+                </div>
+            </section>
+
+            <section class="table-card accent-blue" style="margin-top:1rem">
+                <div class="table-card-header">
+                    <h5>Historial de cambios</h5>
+                    <button class="btn-outline" onclick="cargarHistorial()"><i data-lucide="refresh-cw"></i> Actualizar</button>
+                </div>
+                <table>
+                    <thead><tr><th>Fecha</th><th>Ubicacion</th><th>Producto</th><th>Antes</th><th>Ahora</th><th>Usuario</th></tr></thead>
+                    <tbody id="tbl-historial"><tr><td colspan="6" style="text-align:center;padding:1.5rem;color:#9ca3af">Cargando...</td></tr></tbody>
+                </table>
+            </section>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-ubicacion">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h4 id="ubicacion-titulo">Nueva ubicacion</h4>
+            <button class="modal-close" onclick="closeModal('modal-ubicacion')">&#x2715;</button>
+        </div>
+        <form onsubmit="guardarUbicacion(event)">
+            <input type="hidden" id="loc-id">
+            <div class="form-group"><label>Nombre *</label><input id="loc-name" class="form-control" required></div>
+            <div class="form-group"><label>Direccion *</label><input id="loc-address" class="form-control" required></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="form-group"><label>Latitud *</label><input id="loc-latitude" type="number" step="0.000001" class="form-control" required></div>
+                <div class="form-group"><label>Longitud *</label><input id="loc-longitude" type="number" step="0.000001" class="form-control" required></div>
+            </div>
+            <div class="form-group"><label>Descripcion</label><textarea id="loc-description" class="form-control" rows="2"></textarea></div>
+            <div style="display:flex;justify-content:space-between;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="tomarCentroMapa()"><i data-lucide="map-pin"></i> Usar centro del mapa</button>
+                <div style="display:flex;gap:.5rem">
+                    <button type="button" class="btn-outline" onclick="closeModal('modal-ubicacion')">Cancelar</button>
+                    <button type="submit" class="btn-ohana">Guardar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-inventario">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h4 id="inventario-titulo">Inventario de ubicacion</h4>
+            <button class="modal-close" onclick="closeModal('modal-inventario')">&#x2715;</button>
+        </div>
+        <form onsubmit="guardarInventario(event)">
+            <input type="hidden" id="inv-id">
+            <input type="hidden" id="inv-location-id">
+            <div class="form-group"><label>Producto *</label><input id="inv-product" class="form-control" required></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="form-group"><label>Categoria</label><input id="inv-category" class="form-control" placeholder="Te,Horchata,Jamaica"></div>
+                <div class="form-group"><label>Cantidad *</label><input id="inv-quantity" type="number" min="0" step="0.01" class="form-control" required></div>
+            </div>
+            <div class="form-group"><label>URL de imagen</label><input id="inv-image" class="form-control" placeholder="https://..."></div>
+            <div class="form-group"><label>Notas</label><textarea id="inv-notes" class="form-control" rows="2"></textarea></div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-inventario')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script src="/js/mapa-inventario.js"></script>
+</body>
+</html>

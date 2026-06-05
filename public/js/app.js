@@ -179,6 +179,16 @@ async function guardarPassword() {
 
 /* ── Init global ─────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
+    const nav = document.querySelector('.sidebar-nav');
+    if (nav && !nav.querySelector('a[href="/mapa-inventario"]')) {
+        const item = document.createElement('div');
+        item.className = 'nav-item';
+        item.innerHTML = '<a href="/mapa-inventario"><i data-lucide="map-pinned"></i> Mapa inventario</a>';
+        const inventario = nav.querySelector('a[href="/inventario"]')?.parentElement;
+        if (inventario?.nextSibling) nav.insertBefore(item, inventario.nextSibling);
+        else nav.appendChild(item);
+    }
+
     // Sidebar: marcar enlace activo
     const path = window.location.pathname;
     document.querySelectorAll('.nav-item a').forEach(a => {
