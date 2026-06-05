@@ -28,16 +28,16 @@ router.get('/api/mapa-inventario/stats', (req, res) => {
     const locations = db.prepare('SELECT COUNT(*) AS total FROM locations').get().total || 0;
     const products = db.prepare('SELECT COUNT(*) AS total FROM location_inventory').get().total || 0;
     const units = db.prepare('SELECT COALESCE(SUM(quantity), 0) AS total FROM location_inventory').get().total || 0;
-    const categories = db.prepare(`
-        SELECT COUNT(DISTINCT category) AS total
+    const productTypes = db.prepare(`
+        SELECT COUNT(DISTINCT product_type) AS total
         FROM location_inventory
-        WHERE category IS NOT NULL AND TRIM(category) <> ''
+        WHERE product_type IS NOT NULL AND TRIM(product_type) <> ''
     `).get().total || 0;
-    res.json({ locations, products, units, categories });
+    res.json({ locations, products, units, productTypes });
 });
 
 router.get('/api/mapa-inventario/locations', (req, res) => {
-    const { q = '', category = '' } = req.query;
+    const { q = '', product_type = '', presentation = '' } = req.query;
     const params = [];
     let where = '';
 
@@ -49,12 +49,20 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
         params.push(`%${q.trim().toLowerCase()}%`);
     }
 
-    if (category.trim()) {
+    if (product_type.trim()) {
         where += ` AND EXISTS (
             SELECT 1 FROM location_inventory li
-            WHERE li.location_id = l.id AND lower(li.category) = ?
+            WHERE li.location_id = l.id AND lower(li.product_type) = ?
         )`;
-        params.push(category.trim().toLowerCase());
+        params.push(product_type.trim().toLowerCase());
+    }
+
+    if (presentation.trim()) {
+        where += ` AND EXISTS (
+            SELECT 1 FROM location_inventory li
+            WHERE li.location_id = l.id AND lower(li.presentation) = ?
+        )`;
+        params.push(presentation.trim().toLowerCase());
     }
 
     const locations = db.prepare(`
@@ -132,11 +140,11 @@ router.delete('/api/mapa-inventario/locations/:id', requireRoles('admin'), (req,
 });
 
 router.post('/api/mapa-inventario/inventory', requireRoles('admin'), (req, res) => {
-    const { location_id, product_name, category, notes, image_url } = req.body;
+    const { location_id, product_name, product_type, presentation, notes, image_url } = req.body;
     const quantity = numberOrNull(req.body.quantity);
 
-    if (!location_id || !product_name || quantity === null) {
-        return res.status(400).json({ error: 'Ubicacion, producto y cantidad son requeridos.' });
+    if (!location_id || !product_name || !product_type || !presentation || quantity === null) {
+        return res.status(400).json({ error: 'Ubicacion, producto, tipo, presentacion y cantidad son requeridos.' });
     }
 
     const location = db.prepare('SELECT id FROM locations WHERE id = ?').get(location_id);
@@ -145,9 +153,9 @@ router.post('/api/mapa-inventario/inventory', requireRoles('admin'), (req, res) 
     let newId = null;
     db.transaction(() => {
         const info = db.prepare(`
-            INSERT INTO location_inventory (location_id, product_name, category, quantity, notes, image_url)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `).run(location_id, product_name.trim(), category || null, quantity, notes || null, image_url || null);
+            INSERT INTO location_inventory (location_id, product_name, product_type, presentation, quantity, notes, image_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(location_id, product_name.trim(), product_type || null, presentation || null, quantity, notes || null, image_url || null);
         newId = info.lastInsertRowid;
 
         db.prepare(`
@@ -161,10 +169,10 @@ router.post('/api/mapa-inventario/inventory', requireRoles('admin'), (req, res) 
 });
 
 router.put('/api/mapa-inventario/inventory/:id', requireRoles('admin'), (req, res) => {
-    const { product_name, category, notes, image_url } = req.body;
+    const { product_name, product_type, presentation, notes, image_url } = req.body;
     const quantity = numberOrNull(req.body.quantity);
-    if (!product_name || quantity === null) {
-        return res.status(400).json({ error: 'Producto y cantidad son requeridos.' });
+    if (!product_name || !product_type || !presentation || quantity === null) {
+        return res.status(400).json({ error: 'Producto, tipo, presentacion y cantidad son requeridos.' });
     }
 
     const current = db.prepare('SELECT * FROM location_inventory WHERE id = ?').get(req.params.id);
@@ -173,9 +181,9 @@ router.put('/api/mapa-inventario/inventory/:id', requireRoles('admin'), (req, re
     db.transaction(() => {
         db.prepare(`
             UPDATE location_inventory
-            SET product_name = ?, category = ?, quantity = ?, notes = ?, image_url = ?, updated_at = datetime('now')
+            SET product_name = ?, product_type = ?, presentation = ?, quantity = ?, notes = ?, image_url = ?, updated_at = datetime('now')
             WHERE id = ?
-        `).run(product_name.trim(), category || null, quantity, notes || null, image_url || null, req.params.id);
+        `).run(product_name.trim(), product_type || null, presentation || null, quantity, notes || null, image_url || null, req.params.id);
 
         db.prepare(`
             INSERT INTO location_inventory_history
@@ -204,14 +212,14 @@ router.get('/api/mapa-inventario/history', (req, res) => {
     res.json(rows);
 });
 
-router.get('/api/mapa-inventario/categories', (req, res) => {
+router.get('/api/mapa-inventario/product-types', (req, res) => {
     const rows = db.prepare(`
-        SELECT DISTINCT category
+        SELECT DISTINCT product_type
         FROM location_inventory
-        WHERE category IS NOT NULL AND TRIM(category) <> ''
-        ORDER BY category
+        WHERE product_type IS NOT NULL AND TRIM(product_type) <> ''
+        ORDER BY product_type
     `).all();
-    res.json(rows.map(r => r.category));
+    res.json(rows.map(r => r.product_type));
 });
 
 module.exports = router;

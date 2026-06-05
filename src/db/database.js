@@ -73,6 +73,11 @@ class Db {
         try { this._sqldb.exec('ALTER TABLE empleados ADD COLUMN contrasena TEXT'); } catch (_) { /* ya existe */ }
         // Migracion: agregar restriccion UNIQUE en correo de empleados si no existe
         try { this._sqldb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_empleados_correo ON empleados(correo)'); } catch (_) { /* ya existe */ }
+        // Migraciones: inventario por ubicacion
+        try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN product_type TEXT'); } catch (_) { /* ya existe */ }
+        try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN presentation TEXT'); } catch (_) { /* ya existe */ }
+        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_type ON location_inventory(product_type)'); } catch (_) { /* ignorar */ }
+        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_presentation ON location_inventory(presentation)'); } catch (_) { /* ignorar */ }
         this._save();
     }
 

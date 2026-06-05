@@ -88,7 +88,7 @@ function renderLista() {
     cont.innerHTML = locations.map(location => {
         const inventory = (location.inventory || []).slice(0, 5).map(item => `
             <div class="location-product">
-                <span>${item.product_name}</span>
+                <span>${item.product_name}<small>${item.product_type || '-'} &middot; ${item.presentation || '-'}</small></span>
                 <strong>${Number(item.quantity).toLocaleString('es-MX')}</strong>
                 <button class="btn-icon" title="Editar producto" onclick='event.stopPropagation(); abrirInventario(${location.id}, ${JSON.stringify(item)})'><i data-lucide="pencil"></i></button>
                 <button class="btn-icon danger" title="Eliminar producto" onclick="event.stopPropagation(); eliminarInventario(${item.id})"><i data-lucide="trash-2"></i></button>
@@ -118,10 +118,12 @@ function renderLista() {
 
 async function cargarDatos() {
     const q = document.getElementById('buscar-producto')?.value || '';
-    const category = document.getElementById('filtro-categoria')?.value || '';
+    const productType = document.getElementById('filtro-tipo')?.value || '';
+    const presentation = document.getElementById('filtro-presentacion')?.value || '';
     const params = new URLSearchParams();
     if (q) params.set('q', q);
-    if (category) params.set('category', category);
+    if (productType) params.set('product_type', productType);
+    if (presentation) params.set('presentation', presentation);
 
     locations = await api.get(`/api/mapa-inventario/locations?${params.toString()}`);
     renderMarkers();
@@ -133,16 +135,7 @@ async function cargarStats() {
     document.getElementById('stat-locations').textContent = stats.locations;
     document.getElementById('stat-products').textContent = stats.products;
     document.getElementById('stat-units').textContent = Number(stats.units || 0).toLocaleString('es-MX');
-    document.getElementById('stat-categories').textContent = stats.categories;
-}
-
-async function cargarCategorias() {
-    const select = document.getElementById('filtro-categoria');
-    const current = select.value;
-    const categories = await api.get('/api/mapa-inventario/categories');
-    select.innerHTML = '<option value="">Todas las categorias</option>' +
-        categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
-    select.value = current;
+    document.getElementById('stat-types').textContent = stats.productTypes;
 }
 
 async function cargarHistorial() {
@@ -168,7 +161,8 @@ function aplicarFiltros() {
 
 function limpiarFiltros() {
     document.getElementById('buscar-producto').value = '';
-    document.getElementById('filtro-categoria').value = '';
+    document.getElementById('filtro-tipo').value = '';
+    document.getElementById('filtro-presentacion').value = '';
     cargarDatos();
 }
 
@@ -238,7 +232,8 @@ function abrirInventario(locationId, item = null) {
     document.getElementById('inv-location-id').value = locationId;
     document.getElementById('inv-id').value = item?.id || '';
     document.getElementById('inv-product').value = item?.product_name || '';
-    document.getElementById('inv-category').value = item?.category || '';
+    document.getElementById('inv-product-type').value = item?.product_type || item?.category || '';
+    document.getElementById('inv-presentation').value = item?.presentation || '';
     document.getElementById('inv-quantity').value = item?.quantity ?? '';
     document.getElementById('inv-image').value = item?.image_url || '';
     document.getElementById('inv-notes').value = item?.notes || '';
@@ -251,7 +246,8 @@ async function guardarInventario(event) {
     const payload = {
         location_id: document.getElementById('inv-location-id').value,
         product_name: document.getElementById('inv-product').value,
-        category: document.getElementById('inv-category').value,
+        product_type: document.getElementById('inv-product-type').value,
+        presentation: document.getElementById('inv-presentation').value,
         quantity: document.getElementById('inv-quantity').value,
         image_url: document.getElementById('inv-image').value,
         notes: document.getElementById('inv-notes').value
@@ -290,14 +286,14 @@ function usarMiUbicacion() {
 }
 
 function exportarCSV() {
-    const header = ['ubicacion', 'direccion', 'latitud', 'longitud', 'producto', 'categoria', 'cantidad', 'actualizado'];
+    const header = ['ubicacion', 'direccion', 'latitud', 'longitud', 'producto', 'tipo_producto', 'presentacion', 'cantidad', 'actualizado'];
     const rows = [];
     locations.forEach(location => {
         if (!location.inventory.length) {
-            rows.push([location.name, location.address, location.latitude, location.longitude, '', '', '', '']);
+            rows.push([location.name, location.address, location.latitude, location.longitude, '', '', '', '', '']);
         }
         location.inventory.forEach(item => {
-            rows.push([location.name, location.address, location.latitude, location.longitude, item.product_name, item.category || '', item.quantity, item.updated_at]);
+            rows.push([location.name, location.address, location.latitude, location.longitude, item.product_name, item.product_type || '', item.presentation || '', item.quantity, item.updated_at]);
         });
     });
     const csv = [header, ...rows].map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -311,7 +307,7 @@ function exportarCSV() {
 }
 
 async function refrescarTodo() {
-    await Promise.all([cargarCategorias(), cargarStats(), cargarDatos(), cargarHistorial()]);
+    await Promise.all([cargarStats(), cargarDatos(), cargarHistorial()]);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

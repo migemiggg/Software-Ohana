@@ -53,15 +53,28 @@
                 <div class="stat-card"><div class="stat-icon icon-blue"><i data-lucide="map-pin"></i></div><div class="stat-value" id="stat-locations">-</div><div class="stat-label">Ubicaciones</div></div>
                 <div class="stat-card"><div class="stat-icon icon-green"><i data-lucide="boxes"></i></div><div class="stat-value" id="stat-products">-</div><div class="stat-label">Registros de inventario</div></div>
                 <div class="stat-card"><div class="stat-icon icon-yellow"><i data-lucide="package-check"></i></div><div class="stat-value" id="stat-units">-</div><div class="stat-label">Unidades totales</div></div>
-                <div class="stat-card"><div class="stat-icon icon-red"><i data-lucide="tags"></i></div><div class="stat-value" id="stat-categories">-</div><div class="stat-label">Categorias</div></div>
+                <div class="stat-card"><div class="stat-icon icon-red"><i data-lucide="tags"></i></div><div class="stat-value" id="stat-types">-</div><div class="stat-label">Tipos de producto</div></div>
             </section>
 
             <section class="map-workspace">
                 <aside class="map-panel">
                     <div class="map-search">
                         <input type="text" id="buscar-producto" class="form-control" placeholder="Buscar producto..." oninput="aplicarFiltros()">
-                        <select id="filtro-categoria" class="form-control" onchange="aplicarFiltros()">
-                            <option value="">Todas las categorias</option>
+                        <select id="filtro-tipo" class="form-control" onchange="aplicarFiltros()">
+                            <option value="">Todos los tipos</option>
+                            <option>Te</option>
+                            <option>Jamaica</option>
+                            <option>Horchata</option>
+                            <option>Limonada</option>
+                        </select>
+                        <select id="filtro-presentacion" class="form-control" onchange="aplicarFiltros()">
+                            <option value="">Todas las presentaciones</option>
+                            <option>500ml</option>
+                            <option>1L</option>
+                            <option>1,5L</option>
+                            <option>2L</option>
+                            <option>GALON</option>
+                            <option>Garrafon</option>
                         </select>
                     </div>
                     <div class="map-results-head">
@@ -126,7 +139,28 @@
             <input type="hidden" id="inv-location-id">
             <div class="form-group"><label>Producto *</label><input id="inv-product" class="form-control" required></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-                <div class="form-group"><label>Categoria</label><input id="inv-category" class="form-control" placeholder="Te,Horchata,Jamaica"></div>
+                <div class="form-group">
+                    <label>Tipo de producto *</label>
+                    <select id="inv-product-type" class="form-control" required>
+                        <option value="">Seleccionar...</option>
+                        <option>Te</option>
+                        <option>Jamaica</option>
+                        <option>Horchata</option>
+                        <option>Limonada</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Presentacion *</label>
+                    <select id="inv-presentation" class="form-control" required>
+                        <option value="">Seleccionar...</option>
+                        <option>500ml</option>
+                        <option>1L</option>
+                        <option>1,5L</option>
+                        <option>2L</option>
+                        <option>GALON</option>
+                        <option>Garrafon</option>
+                    </select>
+                </div>
                 <div class="form-group"><label>Cantidad *</label><input id="inv-quantity" type="number" min="0" step="0.01" class="form-control" required></div>
             </div>
             <div class="form-group"><label>URL de imagen</label><input id="inv-image" class="form-control" placeholder="https://..."></div>
