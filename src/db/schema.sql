@@ -155,6 +155,8 @@ CREATE TABLE IF NOT EXISTS location_inventory (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     location_id  INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
     product_name TEXT    NOT NULL,
+    product_type TEXT,
+    presentation TEXT,
     category     TEXT,
     quantity     REAL    NOT NULL DEFAULT 0,
     notes        TEXT,
@@ -177,4 +179,3 @@ CREATE TABLE IF NOT EXISTS location_inventory_history (
 CREATE INDEX IF NOT EXISTS idx_locations_coords ON locations(latitude, longitude);
 CREATE INDEX IF NOT EXISTS idx_location_inventory_location ON location_inventory(location_id);
 CREATE INDEX IF NOT EXISTS idx_location_inventory_product ON location_inventory(product_name);
-CREATE INDEX IF NOT EXISTS idx_location_inventory_category ON location_inventory(category);
