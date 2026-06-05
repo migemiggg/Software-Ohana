@@ -11,6 +11,7 @@ const recetasRoutes       = require('./routes/recetas');
 const empleadosRoutes     = require('./routes/empleados');
 const reportesRoutes      = require('./routes/reportes');
 const solicitudesRoutes   = require('./routes/solicitudes');
+const mapaInventarioRoutes = require('./routes/mapaInventario');
 const { requireLogin, requireRoles } = require('./middleware/auth');
 
 const PORT = process.env.PORT || 3000;
@@ -38,6 +39,7 @@ async function start() {
     app.use('/', empleadosRoutes);
     app.use('/', reportesRoutes);
     app.use('/', solicitudesRoutes);
+    app.use('/', mapaInventarioRoutes);
 
     // Raíz → home según rol
     app.get('/', (req, res) => {
@@ -52,6 +54,7 @@ async function start() {
 
     // Admin + Empleado
     app.get('/inventario',       requireRoles('admin','empleado'),            (req,res) => res.sendFile('inventario.html',        {root:'public'}));
+    app.get('/mapa-inventario',  requireRoles('admin','empleado'),            (req,res) => res.sendFile('mapa-inventario.html',   {root:'public'}));
     app.get('/recordatorios',    requireRoles('admin','empleado'),            (req,res) => res.sendFile('recordatorios.html',     {root:'public'}));
     app.get('/solicitudes',      requireRoles('admin','empleado'),            (req,res) => res.sendFile('solicitudes.html',       {root:'public'}));
 

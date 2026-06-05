@@ -138,3 +138,43 @@ CREATE TABLE IF NOT EXISTS solicitudes_entrada (
     creado_en       TEXT    NOT NULL DEFAULT (datetime('now')),
     revisado_en     TEXT
 );
+
+-- Ubicaciones fisicas con inventario georreferenciado
+CREATE TABLE IF NOT EXISTS locations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL,
+    address     TEXT    NOT NULL,
+    latitude    REAL    NOT NULL,
+    longitude   REAL    NOT NULL,
+    description TEXT,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS location_inventory (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id  INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    product_name TEXT    NOT NULL,
+    category     TEXT,
+    quantity     REAL    NOT NULL DEFAULT 0,
+    notes        TEXT,
+    image_url    TEXT,
+    updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS location_inventory_history (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    inventory_id INTEGER REFERENCES location_inventory(id) ON DELETE SET NULL,
+    location_id  INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    product_name TEXT    NOT NULL,
+    old_quantity REAL,
+    new_quantity REAL    NOT NULL,
+    notes        TEXT,
+    usuario_id   INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    changed_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_locations_coords ON locations(latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_location_inventory_location ON location_inventory(location_id);
+CREATE INDEX IF NOT EXISTS idx_location_inventory_product ON location_inventory(product_name);
+CREATE INDEX IF NOT EXISTS idx_location_inventory_category ON location_inventory(category);
