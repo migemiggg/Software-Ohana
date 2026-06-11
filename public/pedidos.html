@@ -21,7 +21,7 @@
             <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
             <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
             <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
-            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="package-check"></i> Registro de productos</a></div>
             <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
             <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
             <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
@@ -34,9 +34,14 @@
     <div class="main-content">
         <div class="topbar">
             <h3>Pedidos</h3>
-            <button class="btn-ohana" onclick="abrirPedido()">
-                <i data-lucide="plus"></i> Nuevo pedido
-            </button>
+            <div style="display:flex;gap:.5rem">
+                <button class="btn-outline" onclick="abrirCliente()">
+                    <i data-lucide="user-plus"></i> Cliente
+                </button>
+                <button class="btn-ohana" onclick="abrirPedido()">
+                    <i data-lucide="plus"></i> Nuevo pedido
+                </button>
+            </div>
         </div>
 
         <div class="page-body">
@@ -59,6 +64,26 @@
                 </table>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Modal: Nuevo cliente -->
+<div class="modal-overlay" id="modal-cliente">
+    <div class="modal-box" style="max-width:420px">
+        <div class="modal-header">
+            <h4>Nuevo Cliente</h4>
+            <button class="modal-close" onclick="closeModal('modal-cliente')">&#x2715;</button>
+        </div>
+        <form onsubmit="guardarCliente(event)">
+            <div class="form-group"><label>Nombre *</label><input id="cli-nombre" class="form-control" required></div>
+            <div class="form-group"><label>Contacto</label><input id="cli-contacto" class="form-control" placeholder="Tel / WhatsApp"></div>
+            <div class="form-group"><label>Correo</label><input id="cli-correo" type="email" class="form-control"></div>
+            <div class="form-group"><label>Notas</label><textarea id="cli-notas" class="form-control" rows="2"></textarea></div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-cliente')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -130,7 +155,7 @@ let todosPedidos = [], productosDisp = [], clientesDisp = [], filtroEstado = '';
 
 async function cargar() {
     [todosPedidos, productosDisp, clientesDisp] = await Promise.all([
-        api.get('/api/pedidos'), api.get('/api/productos'), api.get('/api/clientes')
+        api.get('/api/pedidos'), api.get('/api/productos?categoria=Productos'), api.get('/api/clientes')
     ]);
     renderClientes();
     renderTabla();
@@ -175,7 +200,7 @@ function renderTabla() {
 }
 
 function agregarLinea() {
-    const opts = productosDisp.map(p => `<option value="${p.id}" data-precio="${p.precio_unitario}">${p.nombre}</option>`).join('');
+    const opts = productosDisp.map(p => `<option value="${p.id}" data-precio="${p.precio_unitario}">${p.nombre} (${p.stock_actual} ${p.unidad})</option>`).join('');
     const div  = document.createElement('div');
     div.className = 'linea-pedido';
     div.style = 'display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
@@ -186,7 +211,7 @@ function agregarLinea() {
         </div>
         <div class="form-group" style="margin:0">
             <label style="font-size:.75rem">Cantidad</label>
-            <input type="number" class="form-control lin-cant" min="1" value="1" step="0.01" oninput="calcularTotal()">
+            <input type="number" class="form-control lin-cant" min="1" value="1" step="1" oninput="calcularTotal()">
         </div>
         <div class="form-group" style="margin:0">
             <label style="font-size:.75rem">Precio</label>
@@ -198,11 +223,40 @@ function agregarLinea() {
 }
 
 function abrirPedido() {
+    if (!clientesDisp.length) {
+        toast('Primero registra un cliente', 'warn');
+        abrirCliente();
+        return;
+    }
     document.getElementById('form-pedido').reset();
     document.getElementById('lineas-pedido').innerHTML = '';
     document.getElementById('ped-location-id').innerHTML = '<option value="">Sin ubicacion asignada</option>';
     document.getElementById('total-pedido').textContent = fmt(0);
     openModal('modal-pedido');
+}
+
+function abrirCliente() {
+    document.getElementById('cli-nombre').value = '';
+    document.getElementById('cli-contacto').value = '';
+    document.getElementById('cli-correo').value = '';
+    document.getElementById('cli-notas').value = '';
+    openModal('modal-cliente');
+}
+
+async function guardarCliente(e) {
+    e.preventDefault();
+    const res = await api.post('/api/clientes', {
+        nombre: document.getElementById('cli-nombre').value,
+        contacto: document.getElementById('cli-contacto').value,
+        correo: document.getElementById('cli-correo').value,
+        notas: document.getElementById('cli-notas').value
+    });
+    if (!res.ok) return toast(res.error || 'No se pudo guardar cliente', 'error');
+    closeModal('modal-cliente');
+    toast('Cliente guardado');
+    await cargar();
+    document.getElementById('ped-cliente-id').value = res.id;
+    await cargarUbicacionesCliente();
 }
 
 async function cargarUbicacionesCliente() {

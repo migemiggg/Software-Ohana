@@ -122,6 +122,8 @@ class Db {
                 WHERE producto_id IS NULL
             `);
         } catch (_) { /* ignorar */ }
+        // Migraciones: recetas producen productos terminados
+        try { this._sqldb.exec('ALTER TABLE recetas ADD COLUMN producto_id INTEGER'); } catch (_) { /* ya existe */ }
         this._save();
     }
 

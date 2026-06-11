@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS recetas (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre      TEXT    NOT NULL,
     descripcion TEXT,
+    producto_id INTEGER REFERENCES productos(id) ON DELETE SET NULL,
     porciones   REAL    NOT NULL DEFAULT 1,
     creado_en   TEXT    NOT NULL DEFAULT (datetime('now'))
 );

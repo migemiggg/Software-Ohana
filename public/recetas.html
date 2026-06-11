@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OhanApp &ndash; Calculo de insumos</title>
+    <title>OhanApp &ndash; Registro de productos</title>
     <link rel="stylesheet" href="/css/ohana.css">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
@@ -21,7 +21,7 @@
             <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
             <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
             <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
-            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="package-check"></i> Registro de productos</a></div>
             <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
             <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
             <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
@@ -33,9 +33,9 @@
 
     <div class="main-content">
         <div class="topbar">
-            <h3>Calculo de Insumos</h3>
+            <h3>Registro de Productos</h3>
             <button class="btn-ohana" onclick="abrirModalReceta()">
-                <i data-lucide="plus"></i> Nueva receta
+                <i data-lucide="plus"></i> Nueva receta base
             </button>
         </div>
 
@@ -63,16 +63,17 @@
                                     </button>
                                 </div>
                             </div>
-                            <div style="padding:.875rem;display:flex;align-items:center;gap:.75rem">
-                                <label style="font-size:.875rem;font-weight:600;white-space:nowrap">Calcular para</label>
-                                <input type="number" id="porciones-calc" class="form-control" style="width:80px" min="1" step="0.5" value="1" oninput="calcular()">
+                            <div style="padding:.875rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                                <label style="font-size:.875rem;font-weight:600;white-space:nowrap">Cantidad a producir</label>
+                                <input type="number" id="porciones-calc" class="form-control" style="width:90px" min="1" step="1" value="1" oninput="calcular()">
                                 <span id="label-porciones" style="color:#6b7280;font-size:.875rem"></span>
+                                <button class="btn-ohana" onclick="registrarProduccion()"><i data-lucide="package-plus"></i> Registrar produccion</button>
                             </div>
                         </div>
 
                         <div class="table-card">
                             <div class="table-card-header">
-                                <h5>Insumos necesarios</h5>
+                                <h5>Insumos a descontar</h5>
                                 <span id="costo-total" style="font-weight:700;color:var(--ohana-dark);font-size:.9rem"></span>
                             </div>
                             <table>
@@ -85,7 +86,7 @@
                     </div>
 
                     <div id="panel-vacio" style="text-align:center;padding:3rem;color:#9ca3af">
-                        <p style="margin-top:.5rem">Selecciona una receta para calcular insumos.</p>
+                        <p style="margin-top:.5rem">Selecciona una receta para registrar produccion.</p>
                     </div>
                 </div>
             </div>
@@ -107,8 +108,12 @@
                     <input type="text" id="rec-nombre" class="form-control" required>
                 </div>
                 <div class="form-group">
-                    <label>Porciones base</label>
-                    <input type="number" id="rec-porciones" class="form-control" min="0.1" step="0.1" value="1">
+                    <label>Producto terminado *</label>
+                    <select id="rec-producto" class="form-control" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Produccion base</label>
+                    <input type="number" id="rec-porciones" class="form-control" min="1" step="1" value="1">
                 </div>
                 <div class="form-group" style="grid-column:1/-1">
                     <label>Descripcion</label>
@@ -133,11 +138,22 @@
 <div id="toast"></div>
 <script src="/js/app.js"></script>
 <script>
-let recetas = [], productos = [], recetaSelId = null, recetaEnEdicion = null;
+let recetas = [], productos = [], productosTerminados = [], recetaSelId = null, recetaEnEdicion = null;
 
 async function cargar() {
-    [recetas, productos] = await Promise.all([api.get('/api/recetas'), api.get('/api/productos')]);
+    const allProductos = await api.get('/api/productos');
+    [recetas, productosTerminados] = await Promise.all([
+        api.get('/api/recetas'),
+        api.get('/api/productos?categoria=Productos')
+    ]);
+    productos = allProductos.filter(p => p.categoria !== 'Productos');
     renderLista();
+    renderProductoTerminadoSelect();
+}
+
+function renderProductoTerminadoSelect() {
+    const opts = productosTerminados.map(p => `<option value="${p.id}">${p.nombre} (${p.unidad})</option>`).join('');
+    document.getElementById('rec-producto').innerHTML = opts || '<option value="">No hay productos terminados</option>';
 }
 
 function renderLista() {
@@ -147,7 +163,7 @@ function renderLista() {
             <div onclick="seleccionarReceta(${r.id})" id="card-receta-${r.id}" class="receta-card"
                  style="padding:.6rem .875rem;border-radius:5px;cursor:pointer;margin-bottom:.25rem;border:1.5px solid transparent;transition:.1s">
                 <strong style="font-size:.875rem">${r.nombre}</strong>
-                <div style="font-size:.75rem;color:#9ca3af">${r.porciones} porciones base</div>
+                <div style="font-size:.75rem;color:#9ca3af">${r.producto_nombre || 'Sin producto ligado'} &middot; base ${r.porciones}</div>
             </div>`).join('')
         : '<p style="color:#9ca3af;padding:.5rem;font-size:.85rem">Sin recetas aun.</p>';
 }
@@ -159,7 +175,7 @@ async function seleccionarReceta(id) {
     if (card) card.style.borderColor = 'var(--ohana-secondary)';
     const r = recetas.find(x => x.id === id);
     document.getElementById('nombre-receta-sel').textContent = r.nombre;
-    document.getElementById('label-porciones').textContent   = `de ${r.porciones}`;
+    document.getElementById('label-porciones').textContent   = `base ${r.porciones} ${r.producto_unidad || ''}`;
     document.getElementById('porciones-calc').value          = r.porciones;
     document.getElementById('panel-vacio').style.display    = 'none';
     document.getElementById('panel-calcular').style.display = 'block';
@@ -186,10 +202,30 @@ async function calcular() {
         : '<tr><td colspan="5" style="text-align:center;padding:1rem;color:#9ca3af">Sin ingredientes</td></tr>';
 }
 
+async function registrarProduccion() {
+    if (!recetaSelId) return;
+    const cantidad = parseFloat(document.getElementById('porciones-calc').value) || 0;
+    const res = await api.post(`/api/recetas/${recetaSelId}/registrar`, { cantidad });
+    if (res.ok) {
+        toast('Produccion registrada e inventario actualizado');
+        await cargar();
+        await seleccionarReceta(recetaSelId);
+        return;
+    }
+
+    if (res.faltantes && res.faltantes.length) {
+        const lista = res.faltantes.map(f => `${f.producto}: ${f.stock_actual}/${f.necesario} ${f.unidad}`).join(', ');
+        toast(lista, 'error');
+    } else {
+        toast(res.error || 'No se pudo registrar produccion', 'error');
+    }
+}
+
 function abrirModalReceta() {
     recetaEnEdicion = null;
     document.getElementById('form-receta').reset();
     document.getElementById('ingredientes-form').innerHTML = '';
+    renderProductoTerminadoSelect();
     document.getElementById('modal-receta-titulo').textContent = 'Nueva Receta';
     openModal('modal-receta');
 }
@@ -202,6 +238,7 @@ async function editarRecetaSel() {
     
     document.getElementById('rec-nombre').value = res.nombre;
     document.getElementById('rec-desc').value = res.descripcion || '';
+    document.getElementById('rec-producto').value = res.producto_id || '';
     document.getElementById('rec-porciones').value = res.porciones;
     
     document.getElementById('ingredientes-form').innerHTML = '';
@@ -254,6 +291,7 @@ async function guardarReceta(e) {
     const datos = {
         nombre:      document.getElementById('rec-nombre').value,
         descripcion: document.getElementById('rec-desc').value,
+        producto_id:  document.getElementById('rec-producto').value,
         porciones:   parseFloat(document.getElementById('rec-porciones').value) || 1,
         ingredientes
     };

@@ -28,6 +28,7 @@ function initMap() {
 
 function popupHtml(location) {
     const items = location.inventory || [];
+    const pedidos = location.orders || [];
     const inventory = items.length
         ? items.map(item => `
             <tr>
@@ -37,6 +38,15 @@ function popupHtml(location) {
             </tr>
         `).join('')
         : '<tr><td colspan="3" style="color:#8fa4b8">Sin inventario registrado</td></tr>';
+    const pedidosHtml = pedidos.length
+        ? pedidos.map(p => `
+            <tr>
+                <td>#${p.pedido_id}</td>
+                <td>${p.producto}</td>
+                <td><strong>${Number(p.cantidad).toLocaleString('es-MX')}</strong> ${p.unidad || ''}</td>
+            </tr>
+        `).join('')
+        : '<tr><td colspan="3" style="color:#8fa4b8">Sin pedidos activos</td></tr>';
 
     return `
         <div class="map-popup">
@@ -45,6 +55,11 @@ function popupHtml(location) {
             <table>
                 <thead><tr><th>Producto</th><th>Cant.</th><th>Actualizado</th></tr></thead>
                 <tbody>${inventory}</tbody>
+            </table>
+            <strong style="display:block;margin:.55rem 0 .25rem;font-size:.78rem">Pedidos asignados</strong>
+            <table>
+                <thead><tr><th>#</th><th>Producto</th><th>Cant.</th></tr></thead>
+                <tbody>${pedidosHtml}</tbody>
             </table>
             <button class="btn-ohana" onclick="seleccionarUbicacion(${location.id})">Administrar</button>
         </div>
@@ -103,6 +118,7 @@ function renderLista() {
                 <h4>${location.name}</h4>
                 <p>${location.address}</p>
                 <small>${location.clientes || 'Sin cliente'} &middot; ${location.product_count || 0} productos &middot; ${unidadesEncontradas(location).toLocaleString('es-MX')} unidades</small>
+                ${(location.orders || []).length ? `<small>${location.orders.length} producto(s) en pedidos activos</small>` : ''}
             </div>
             <div class="location-products">
                 ${inventory || '<span class="product-empty">Sin productos</span>'}
@@ -141,7 +157,7 @@ async function cargarStats() {
 async function cargarCatalogos() {
     [clientes, productos] = await Promise.all([
         api.get('/api/clientes'),
-        api.get('/api/productos')
+        api.get('/api/productos?categoria=Productos')
     ]);
 
     const filtroCliente = document.getElementById('filtro-cliente');
