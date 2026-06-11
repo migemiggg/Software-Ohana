@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS receta_ingredientes (
 -- Tabla de pedidos
 CREATE TABLE IF NOT EXISTS pedidos (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_id      INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+    location_id     INTEGER REFERENCES locations(id) ON DELETE SET NULL,
     cliente_nombre  TEXT    NOT NULL,
     cliente_contacto TEXT,
     estado          TEXT    NOT NULL DEFAULT 'pendiente',  -- 'pendiente' | 'en_proceso' | 'entregado' | 'cancelado'
@@ -139,6 +141,17 @@ CREATE TABLE IF NOT EXISTS solicitudes_entrada (
     revisado_en     TEXT
 );
 
+-- Clientes normalizados para pedidos y mapa
+CREATE TABLE IF NOT EXISTS clientes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre      TEXT    NOT NULL,
+    contacto    TEXT,
+    correo      TEXT,
+    notas       TEXT,
+    creado_en   TEXT    NOT NULL DEFAULT (datetime('now')),
+    actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Ubicaciones fisicas con inventario georreferenciado
 CREATE TABLE IF NOT EXISTS locations (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,9 +164,19 @@ CREATE TABLE IF NOT EXISTS locations (
     updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS cliente_locations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_id  INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+    location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    notas       TEXT,
+    creado_en   TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(cliente_id, location_id)
+);
+
 CREATE TABLE IF NOT EXISTS location_inventory (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     location_id  INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    producto_id  INTEGER REFERENCES productos(id) ON DELETE SET NULL,
     product_name TEXT    NOT NULL,
     product_type TEXT,
     presentation TEXT,
@@ -177,5 +200,7 @@ CREATE TABLE IF NOT EXISTS location_inventory_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_locations_coords ON locations(latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_cliente_locations_cliente ON cliente_locations(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_cliente_locations_location ON cliente_locations(location_id);
 CREATE INDEX IF NOT EXISTS idx_location_inventory_location ON location_inventory(location_id);
 CREATE INDEX IF NOT EXISTS idx_location_inventory_product ON location_inventory(product_name);

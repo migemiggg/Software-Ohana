@@ -73,11 +73,55 @@ class Db {
         try { this._sqldb.exec('ALTER TABLE empleados ADD COLUMN contrasena TEXT'); } catch (_) { /* ya existe */ }
         // Migracion: agregar restriccion UNIQUE en correo de empleados si no existe
         try { this._sqldb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_empleados_correo ON empleados(correo)'); } catch (_) { /* ya existe */ }
+        // Migraciones: clientes normalizados, pedidos y ubicaciones
+        try { this._sqldb.exec('CREATE TABLE IF NOT EXISTS clientes (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, contacto TEXT, correo TEXT, notas TEXT, creado_en TEXT NOT NULL DEFAULT (datetime("now")), actualizado_en TEXT NOT NULL DEFAULT (datetime("now")))'); } catch (_) { /* ignorar */ }
+        try { this._sqldb.exec('CREATE TABLE IF NOT EXISTS cliente_locations (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL, location_id INTEGER NOT NULL, notas TEXT, creado_en TEXT NOT NULL DEFAULT (datetime("now")), UNIQUE(cliente_id, location_id))'); } catch (_) { /* ignorar */ }
+        try { this._sqldb.exec('ALTER TABLE pedidos ADD COLUMN cliente_id INTEGER'); } catch (_) { /* ya existe */ }
+        try { this._sqldb.exec('ALTER TABLE pedidos ADD COLUMN location_id INTEGER'); } catch (_) { /* ya existe */ }
+        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_cliente_locations_cliente ON cliente_locations(cliente_id)'); } catch (_) { /* ignorar */ }
+        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_cliente_locations_location ON cliente_locations(location_id)'); } catch (_) { /* ignorar */ }
+        try {
+            this._sqldb.exec(`
+                INSERT INTO clientes (nombre, contacto)
+                SELECT DISTINCT cliente_nombre, cliente_contacto
+                FROM pedidos
+                WHERE cliente_nombre IS NOT NULL
+                  AND TRIM(cliente_nombre) <> ''
+                  AND NOT EXISTS (
+                      SELECT 1 FROM clientes c
+                      WHERE lower(c.nombre) = lower(pedidos.cliente_nombre)
+                  )
+            `);
+        } catch (_) { /* ignorar */ }
+        try {
+            this._sqldb.exec(`
+                UPDATE pedidos
+                SET cliente_id = (
+                    SELECT c.id FROM clientes c
+                    WHERE lower(c.nombre) = lower(pedidos.cliente_nombre)
+                    LIMIT 1
+                )
+                WHERE cliente_id IS NULL
+            `);
+        } catch (_) { /* ignorar */ }
         // Migraciones: inventario por ubicacion
+        try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN producto_id INTEGER'); } catch (_) { /* ya existe */ }
         try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN product_type TEXT'); } catch (_) { /* ya existe */ }
         try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN presentation TEXT'); } catch (_) { /* ya existe */ }
+        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_producto ON location_inventory(producto_id)'); } catch (_) { /* ignorar */ }
         try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_type ON location_inventory(product_type)'); } catch (_) { /* ignorar */ }
         try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_presentation ON location_inventory(presentation)'); } catch (_) { /* ignorar */ }
+        try {
+            this._sqldb.exec(`
+                UPDATE location_inventory
+                SET producto_id = (
+                    SELECT p.id FROM productos p
+                    WHERE lower(p.nombre) = lower(location_inventory.product_name)
+                    LIMIT 1
+                )
+                WHERE producto_id IS NULL
+            `);
+        } catch (_) { /* ignorar */ }
         this._save();
     }
 

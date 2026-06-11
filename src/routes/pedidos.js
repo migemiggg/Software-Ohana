@@ -8,9 +8,16 @@ router.use(requireLogin);
 // Listar pedidos
 router.get('/api/pedidos', (req, res) => {
     const rows = db.prepare(`
-        SELECT p.*, u.nombre AS usuario
+        SELECT p.*,
+               u.nombre AS usuario,
+               c.nombre AS cliente_normalizado,
+               c.contacto AS cliente_contacto_normalizado,
+               l.name AS ubicacion_nombre,
+               l.address AS ubicacion_direccion
         FROM pedidos p
         LEFT JOIN usuarios u ON u.id = p.usuario_id
+        LEFT JOIN clientes c ON c.id = p.cliente_id
+        LEFT JOIN locations l ON l.id = p.location_id
         ORDER BY p.fecha_pedido DESC
     `).all();
     res.json(rows);
@@ -18,7 +25,17 @@ router.get('/api/pedidos', (req, res) => {
 
 // Obtener pedido con detalles
 router.get('/api/pedidos/:id', (req, res) => {
-    const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(req.params.id);
+    const pedido = db.prepare(`
+        SELECT p.*,
+               c.nombre AS cliente_normalizado,
+               c.contacto AS cliente_contacto_normalizado,
+               l.name AS ubicacion_nombre,
+               l.address AS ubicacion_direccion
+        FROM pedidos p
+        LEFT JOIN clientes c ON c.id = p.cliente_id
+        LEFT JOIN locations l ON l.id = p.location_id
+        WHERE p.id = ?
+    `).get(req.params.id);
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado.' });
 
     const detalles = db.prepare(`
@@ -33,18 +50,31 @@ router.get('/api/pedidos/:id', (req, res) => {
 
 // Crear pedido
 router.post('/api/pedidos', (req, res) => {
-    const { cliente_nombre, cliente_contacto, fecha_entrega, notas, detalles } = req.body;
-    if (!cliente_nombre || !detalles || !detalles.length) {
+    const { cliente_id, location_id, cliente_nombre, cliente_contacto, fecha_entrega, notas, detalles } = req.body;
+    if ((!cliente_id && !cliente_nombre) || !detalles || !detalles.length) {
         return res.status(400).json({ error: 'Faltan datos del pedido.' });
     }
 
     const total = detalles.reduce((sum, d) => sum + d.cantidad * d.precio, 0);
 
     const result = db.transaction(() => {
+        let cliente = cliente_id ? db.prepare('SELECT * FROM clientes WHERE id = ?').get(cliente_id) : null;
+        if (!cliente && cliente_nombre) {
+            cliente = db.prepare('SELECT * FROM clientes WHERE lower(nombre) = lower(?) LIMIT 1').get(cliente_nombre);
+            if (!cliente) {
+                const insertedCliente = db.prepare(`
+                    INSERT INTO clientes (nombre, contacto)
+                    VALUES (?, ?)
+                `).run(cliente_nombre.trim(), cliente_contacto || null);
+                cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(insertedCliente.lastInsertRowid);
+            }
+        }
+
         const info = db.prepare(`
-            INSERT INTO pedidos (cliente_nombre, cliente_contacto, fecha_entrega, notas, total, usuario_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `).run(cliente_nombre, cliente_contacto || null, fecha_entrega || null,
+            INSERT INTO pedidos (cliente_id, location_id, cliente_nombre, cliente_contacto, fecha_entrega, notas, total, usuario_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(cliente?.id || null, location_id || null, cliente?.nombre || cliente_nombre,
+               cliente?.contacto || cliente_contacto || null, fecha_entrega || null,
                notas || null, total, req.session.usuario.id);
 
         const pedidoId = info.lastInsertRowid;

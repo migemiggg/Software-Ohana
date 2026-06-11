@@ -13,12 +13,26 @@ function numberOrNull(value) {
 }
 
 function getLocationWithInventory(id) {
-    const location = db.prepare('SELECT * FROM locations WHERE id = ?').get(id);
+    const location = db.prepare(`
+        SELECT l.*,
+               GROUP_CONCAT(c.nombre, ', ') AS clientes
+        FROM locations l
+        LEFT JOIN cliente_locations cl ON cl.location_id = l.id
+        LEFT JOIN clientes c ON c.id = cl.cliente_id
+        WHERE l.id = ?
+        GROUP BY l.id
+    `).get(id);
     if (!location) return null;
     location.inventory = db.prepare(`
-        SELECT *
-        FROM location_inventory
-        WHERE location_id = ?
+        SELECT li.*,
+               COALESCE(p.nombre, li.product_name) AS product_name,
+               p.unidad,
+               p.precio_unitario,
+               c.nombre AS categoria
+        FROM location_inventory li
+        LEFT JOIN productos p ON p.id = li.producto_id
+        LEFT JOIN categorias c ON c.id = p.categoria_id
+        WHERE li.location_id = ?
         ORDER BY product_name
     `).all(id);
     return location;
@@ -28,23 +42,26 @@ router.get('/api/mapa-inventario/stats', (req, res) => {
     const locations = db.prepare('SELECT COUNT(*) AS total FROM locations').get().total || 0;
     const products = db.prepare('SELECT COUNT(*) AS total FROM location_inventory').get().total || 0;
     const units = db.prepare('SELECT COALESCE(SUM(quantity), 0) AS total FROM location_inventory').get().total || 0;
+    const clients = db.prepare('SELECT COUNT(*) AS total FROM clientes').get().total || 0;
     const productTypes = db.prepare(`
         SELECT COUNT(DISTINCT product_type) AS total
         FROM location_inventory
         WHERE product_type IS NOT NULL AND TRIM(product_type) <> ''
     `).get().total || 0;
-    res.json({ locations, products, units, productTypes });
+    res.json({ locations, products, units, productTypes, clients });
 });
 
 router.get('/api/mapa-inventario/locations', (req, res) => {
-    const { q = '', product_type = '', presentation = '' } = req.query;
+    const { q = '', product_type = '', presentation = '', cliente_id = '' } = req.query;
     const params = [];
     let where = '';
 
     if (q.trim()) {
         where += ` AND EXISTS (
             SELECT 1 FROM location_inventory li
-            WHERE li.location_id = l.id AND lower(li.product_name) LIKE ?
+            LEFT JOIN productos p ON p.id = li.producto_id
+            WHERE li.location_id = l.id
+              AND lower(COALESCE(p.nombre, li.product_name)) LIKE ?
         )`;
         params.push(`%${q.trim().toLowerCase()}%`);
     }
@@ -65,21 +82,38 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
         params.push(presentation.trim().toLowerCase());
     }
 
+    if (cliente_id) {
+        where += ` AND EXISTS (
+            SELECT 1 FROM cliente_locations cl
+            WHERE cl.location_id = l.id AND cl.cliente_id = ?
+        )`;
+        params.push(cliente_id);
+    }
+
     const locations = db.prepare(`
         SELECT l.*,
+               GROUP_CONCAT(DISTINCT c.nombre) AS clientes,
                COUNT(li.id) AS product_count,
                COALESCE(SUM(li.quantity), 0) AS total_quantity
         FROM locations l
         LEFT JOIN location_inventory li ON li.location_id = l.id
+        LEFT JOIN cliente_locations cl ON cl.location_id = l.id
+        LEFT JOIN clientes c ON c.id = cl.cliente_id
         WHERE 1 = 1 ${where}
         GROUP BY l.id
         ORDER BY l.name
     `).all(params);
 
     const inventoryStmt = db.prepare(`
-        SELECT *
-        FROM location_inventory
-        WHERE location_id = ?
+        SELECT li.*,
+               COALESCE(p.nombre, li.product_name) AS product_name,
+               p.unidad,
+               p.precio_unitario,
+               c.nombre AS categoria
+        FROM location_inventory li
+        LEFT JOIN productos p ON p.id = li.producto_id
+        LEFT JOIN categorias c ON c.id = p.categoria_id
+        WHERE li.location_id = ?
         ORDER BY product_name
     `);
 
@@ -96,36 +130,53 @@ router.get('/api/mapa-inventario/locations/:id', (req, res) => {
 });
 
 router.post('/api/mapa-inventario/locations', requireRoles('admin'), (req, res) => {
-    const { name, address, description } = req.body;
+    const { name, address, description, cliente_id } = req.body;
     const latitude = numberOrNull(req.body.latitude);
     const longitude = numberOrNull(req.body.longitude);
 
-    if (!name || !address || latitude === null || longitude === null) {
-        return res.status(400).json({ error: 'Nombre, direccion, latitud y longitud son requeridos.' });
+    if (!cliente_id || !name || !address || latitude === null || longitude === null) {
+        return res.status(400).json({ error: 'Cliente, nombre, direccion, latitud y longitud son requeridos.' });
     }
 
-    const info = db.prepare(`
-        INSERT INTO locations (name, address, latitude, longitude, description)
-        VALUES (?, ?, ?, ?, ?)
-    `).run(name.trim(), address.trim(), latitude, longitude, description || null);
+    const info = db.transaction(() => {
+        const inserted = db.prepare(`
+            INSERT INTO locations (name, address, latitude, longitude, description)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(name.trim(), address.trim(), latitude, longitude, description || null);
+
+        db.prepare(`
+            INSERT OR IGNORE INTO cliente_locations (cliente_id, location_id)
+            VALUES (?, ?)
+        `).run(cliente_id, inserted.lastInsertRowid);
+
+        return inserted;
+    })();
 
     res.json({ ok: true, id: info.lastInsertRowid });
 });
 
 router.put('/api/mapa-inventario/locations/:id', requireRoles('admin'), (req, res) => {
-    const { name, address, description } = req.body;
+    const { name, address, description, cliente_id } = req.body;
     const latitude = numberOrNull(req.body.latitude);
     const longitude = numberOrNull(req.body.longitude);
 
-    if (!name || !address || latitude === null || longitude === null) {
-        return res.status(400).json({ error: 'Nombre, direccion, latitud y longitud son requeridos.' });
+    if (!cliente_id || !name || !address || latitude === null || longitude === null) {
+        return res.status(400).json({ error: 'Cliente, nombre, direccion, latitud y longitud son requeridos.' });
     }
 
-    db.prepare(`
-        UPDATE locations
-        SET name = ?, address = ?, latitude = ?, longitude = ?, description = ?, updated_at = datetime('now')
-        WHERE id = ?
-    `).run(name.trim(), address.trim(), latitude, longitude, description || null, req.params.id);
+    db.transaction(() => {
+        db.prepare(`
+            UPDATE locations
+            SET name = ?, address = ?, latitude = ?, longitude = ?, description = ?, updated_at = datetime('now')
+            WHERE id = ?
+        `).run(name.trim(), address.trim(), latitude, longitude, description || null, req.params.id);
+
+        db.prepare('DELETE FROM cliente_locations WHERE location_id = ?').run(req.params.id);
+        db.prepare(`
+            INSERT OR IGNORE INTO cliente_locations (cliente_id, location_id)
+            VALUES (?, ?)
+        `).run(cliente_id, req.params.id);
+    })();
 
     res.json({ ok: true });
 });
@@ -134,62 +185,77 @@ router.delete('/api/mapa-inventario/locations/:id', requireRoles('admin'), (req,
     db.transaction(() => {
         db.prepare('DELETE FROM location_inventory WHERE location_id = ?').run(req.params.id);
         db.prepare('DELETE FROM location_inventory_history WHERE location_id = ?').run(req.params.id);
+        db.prepare('DELETE FROM cliente_locations WHERE location_id = ?').run(req.params.id);
         db.prepare('DELETE FROM locations WHERE id = ?').run(req.params.id);
     })();
     res.json({ ok: true });
 });
 
 router.post('/api/mapa-inventario/inventory', requireRoles('admin'), (req, res) => {
-    const { location_id, product_name, product_type, presentation, notes, image_url } = req.body;
+    const { location_id, producto_id, notes, image_url } = req.body;
     const quantity = numberOrNull(req.body.quantity);
 
-    if (!location_id || !product_name || !product_type || !presentation || quantity === null) {
-        return res.status(400).json({ error: 'Ubicacion, producto, tipo, presentacion y cantidad son requeridos.' });
+    if (!location_id || !producto_id || quantity === null) {
+        return res.status(400).json({ error: 'Ubicacion, producto y cantidad son requeridos.' });
     }
 
     const location = db.prepare('SELECT id FROM locations WHERE id = ?').get(location_id);
     if (!location) return res.status(404).json({ error: 'Ubicacion no encontrada.' });
+    const producto = db.prepare(`
+        SELECT p.*, c.nombre AS categoria
+        FROM productos p
+        LEFT JOIN categorias c ON c.id = p.categoria_id
+        WHERE p.id = ?
+    `).get(producto_id);
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado.' });
 
     let newId = null;
     db.transaction(() => {
         const info = db.prepare(`
-            INSERT INTO location_inventory (location_id, product_name, product_type, presentation, quantity, notes, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(location_id, product_name.trim(), product_type || null, presentation || null, quantity, notes || null, image_url || null);
+            INSERT INTO location_inventory (location_id, producto_id, product_name, product_type, presentation, quantity, notes, image_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(location_id, producto_id, producto.nombre, producto.categoria || null, producto.unidad || null, quantity, notes || null, image_url || null);
         newId = info.lastInsertRowid;
 
         db.prepare(`
             INSERT INTO location_inventory_history
                 (inventory_id, location_id, product_name, old_quantity, new_quantity, notes, usuario_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(newId, location_id, product_name.trim(), null, quantity, 'Alta de inventario', req.session.usuario.id);
+        `).run(newId, location_id, producto.nombre, null, quantity, 'Alta de inventario', req.session.usuario.id);
     })();
 
     res.json({ ok: true, id: newId });
 });
 
 router.put('/api/mapa-inventario/inventory/:id', requireRoles('admin'), (req, res) => {
-    const { product_name, product_type, presentation, notes, image_url } = req.body;
+    const { producto_id, notes, image_url } = req.body;
     const quantity = numberOrNull(req.body.quantity);
-    if (!product_name || !product_type || !presentation || quantity === null) {
-        return res.status(400).json({ error: 'Producto, tipo, presentacion y cantidad son requeridos.' });
+    if (!producto_id || quantity === null) {
+        return res.status(400).json({ error: 'Producto y cantidad son requeridos.' });
     }
 
     const current = db.prepare('SELECT * FROM location_inventory WHERE id = ?').get(req.params.id);
     if (!current) return res.status(404).json({ error: 'Inventario no encontrado.' });
+    const producto = db.prepare(`
+        SELECT p.*, c.nombre AS categoria
+        FROM productos p
+        LEFT JOIN categorias c ON c.id = p.categoria_id
+        WHERE p.id = ?
+    `).get(producto_id);
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado.' });
 
     db.transaction(() => {
         db.prepare(`
             UPDATE location_inventory
-            SET product_name = ?, product_type = ?, presentation = ?, quantity = ?, notes = ?, image_url = ?, updated_at = datetime('now')
+            SET producto_id = ?, product_name = ?, product_type = ?, presentation = ?, quantity = ?, notes = ?, image_url = ?, updated_at = datetime('now')
             WHERE id = ?
-        `).run(product_name.trim(), product_type || null, presentation || null, quantity, notes || null, image_url || null, req.params.id);
+        `).run(producto_id, producto.nombre, producto.categoria || null, producto.unidad || null, quantity, notes || null, image_url || null, req.params.id);
 
         db.prepare(`
             INSERT INTO location_inventory_history
                 (inventory_id, location_id, product_name, old_quantity, new_quantity, notes, usuario_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(req.params.id, current.location_id, product_name.trim(), current.quantity, quantity, notes || 'Actualizacion de cantidad', req.session.usuario.id);
+        `).run(req.params.id, current.location_id, producto.nombre, current.quantity, quantity, notes || 'Actualizacion de cantidad', req.session.usuario.id);
     })();
 
     res.json({ ok: true });
@@ -209,6 +275,50 @@ router.get('/api/mapa-inventario/history', (req, res) => {
         ORDER BY h.changed_at DESC
         LIMIT 100
     `).all();
+    res.json(rows);
+});
+
+router.get('/api/clientes', (req, res) => {
+    const { q = '' } = req.query;
+    const params = [];
+    let where = '';
+    if (q.trim()) {
+        where = 'WHERE lower(nombre) LIKE ? OR lower(COALESCE(contacto, "")) LIKE ?';
+        params.push(`%${q.trim().toLowerCase()}%`, `%${q.trim().toLowerCase()}%`);
+    }
+
+    const rows = db.prepare(`
+        SELECT c.*,
+               COUNT(cl.location_id) AS ubicaciones
+        FROM clientes c
+        LEFT JOIN cliente_locations cl ON cl.cliente_id = c.id
+        ${where}
+        GROUP BY c.id
+        ORDER BY c.nombre
+    `).all(params);
+    res.json(rows);
+});
+
+router.post('/api/clientes', requireRoles('admin'), (req, res) => {
+    const { nombre, contacto, correo, notas } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'El nombre del cliente es requerido.' });
+
+    const info = db.prepare(`
+        INSERT INTO clientes (nombre, contacto, correo, notas)
+        VALUES (?, ?, ?, ?)
+    `).run(nombre.trim(), contacto || null, correo || null, notas || null);
+
+    res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+router.get('/api/clientes/:id/locations', (req, res) => {
+    const rows = db.prepare(`
+        SELECT l.*
+        FROM locations l
+        JOIN cliente_locations cl ON cl.location_id = l.id
+        WHERE cl.cliente_id = ?
+        ORDER BY l.name
+    `).all(req.params.id);
     res.json(rows);
 });
 
