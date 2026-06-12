@@ -5,7 +5,7 @@
 **Proyecto:** Sistema de Gestión de Inventario y Distribución Ohana
 **Fecha:** 29 de mayo de 2026
 **Scrum Master:** ADAL GASTELUM SALAZAR 
-**Equipo de Desarrollo:** PAUL, EFREN, YAHIR, MIGUEL.
+**Equipo de Desarrollo:** PAUL, EFREN y JAIR.
 **Tipo de reunión:** Seguimiento de Sprint
 
 # 1. Objetivo de la reunión
