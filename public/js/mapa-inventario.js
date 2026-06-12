@@ -7,6 +7,112 @@ let markers = new Map();
 let selectedLocationId = null;
 
 const normalizar = value => String(value || '').trim().toLowerCase();
+const GEOCODE_CONTEXT = 'Culiacan, Sinaloa, Mexico';
+
+function setDireccionStatus(message, type = 'neutral') {
+    const status = document.getElementById('loc-address-status');
+    if (!status) return;
+    const colors = {
+        neutral: 'var(--txt-3)',
+        ok: 'var(--leaf-1)',
+        warn: 'var(--sun-1)',
+        error: 'var(--berry)'
+    };
+    status.textContent = message;
+    status.style.color = colors[type] || colors.neutral;
+}
+
+function direccionConContexto(address) {
+    const value = String(address || '').trim();
+    if (/culiac|sinaloa|mex/i.test(value)) return value;
+    return `${value}, ${GEOCODE_CONTEXT}`;
+}
+
+function coordenadasValidas() {
+    const lat = Number(document.getElementById('loc-latitude').value);
+    const lon = Number(document.getElementById('loc-longitude').value);
+    return Number.isFinite(lat) && Number.isFinite(lon) &&
+        Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+}
+
+function marcarDireccionPendiente() {
+    const address = document.getElementById('loc-address');
+    if (!address) return;
+    if (address.value.trim() !== (address.dataset.resolvedAddress || '')) {
+        document.getElementById('loc-latitude').value = '';
+        document.getElementById('loc-longitude').value = '';
+        setDireccionStatus('Direccion pendiente de ubicar. Se buscara al guardar.', 'warn');
+    }
+}
+
+async function geocodificarDireccion({ enfocar = true } = {}) {
+    const addressInput = document.getElementById('loc-address');
+    const rawAddress = addressInput.value.trim();
+    if (!rawAddress) {
+        setDireccionStatus('Escribe una direccion completa para ubicarla.', 'error');
+        return false;
+    }
+
+    setDireccionStatus('Buscando direccion en el mapa...', 'neutral');
+    const query = new URLSearchParams({
+        format: 'jsonv2',
+        limit: '1',
+        countrycodes: 'mx',
+        'accept-language': 'es',
+        q: direccionConContexto(rawAddress)
+    });
+
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${query.toString()}`);
+        if (!res.ok) throw new Error('No se pudo consultar el mapa.');
+        const results = await res.json();
+        if (!results.length) {
+            setDireccionStatus('No encontre esa direccion. Agrega colonia, ciudad y estado.', 'error');
+            return false;
+        }
+
+        const result = results[0];
+        const lat = Number(result.lat);
+        const lon = Number(result.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+            setDireccionStatus('La direccion no regreso un punto valido.', 'error');
+            return false;
+        }
+
+        document.getElementById('loc-latitude').value = lat.toFixed(6);
+        document.getElementById('loc-longitude').value = lon.toFixed(6);
+        addressInput.value = result.display_name || rawAddress;
+        addressInput.dataset.resolvedAddress = addressInput.value.trim();
+        setDireccionStatus('Direccion ubicada y lista para guardar.', 'ok');
+
+        if (enfocar && map) {
+            map.setView([lat, lon], 16);
+        }
+        return true;
+    } catch (error) {
+        setDireccionStatus('No se pudo ubicar la direccion. Revisa internet o usa el punto del mapa.', 'error');
+        return false;
+    }
+}
+
+async function buscarDireccionModal() {
+    const ok = await geocodificarDireccion();
+    if (ok) toast('Direccion ubicada');
+}
+
+async function direccionDesdeCoordenadas(lat, lon) {
+    const query = new URLSearchParams({
+        format: 'jsonv2',
+        lat,
+        lon,
+        zoom: '18',
+        addressdetails: '1',
+        'accept-language': 'es'
+    });
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${query.toString()}`);
+    if (!res.ok) throw new Error('No se pudo leer la direccion.');
+    return res.json();
+}
 
 function markerIcon(highlight = false) {
     return L.divIcon({
@@ -19,7 +125,7 @@ function markerIcon(highlight = false) {
 }
 
 function initMap() {
-    map = L.map('inventory-map', { zoomControl: true }).setView([20.6736, -103.344], 12);
+    map = L.map('inventory-map', { zoomControl: true }).setView([24.8091, -107.3940], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap'
@@ -217,24 +323,50 @@ function abrirUbicacion(id = null) {
     const location = id ? locations.find(item => item.id === id) : null;
     document.getElementById('ubicacion-titulo').textContent = location ? 'Editar ubicacion' : 'Nueva ubicacion';
     document.getElementById('loc-id').value = location?.id || '';
-    const selectedCliente = clientes.find(c => location?.clientes?.split(',').map(v => v.trim()).includes(c.nombre));
-    document.getElementById('loc-cliente').value = selectedCliente?.id || document.getElementById('filtro-cliente').value || '';
+    const linkedClienteId = location?.cliente_id || String(location?.cliente_ids || '').split(',').filter(Boolean)[0];
+    document.getElementById('loc-cliente').value = linkedClienteId || document.getElementById('filtro-cliente').value || '';
     document.getElementById('loc-name').value = location?.name || '';
-    document.getElementById('loc-address').value = location?.address || '';
+    const addressInput = document.getElementById('loc-address');
+    addressInput.value = location?.address || '';
+    addressInput.dataset.resolvedAddress = location?.address || '';
     document.getElementById('loc-latitude').value = location?.latitude || '';
     document.getElementById('loc-longitude').value = location?.longitude || '';
     document.getElementById('loc-description').value = location?.description || '';
+    setDireccionStatus(location ? 'Direccion ligada al punto guardado.' : 'Escribe la direccion y el sistema ubicara el punto en el mapa.');
     openModal('modal-ubicacion');
 }
 
-function tomarCentroMapa() {
+async function tomarCentroMapa() {
     const center = map.getCenter();
-    document.getElementById('loc-latitude').value = center.lat.toFixed(6);
-    document.getElementById('loc-longitude').value = center.lng.toFixed(6);
+    const lat = center.lat.toFixed(6);
+    const lon = center.lng.toFixed(6);
+    document.getElementById('loc-latitude').value = lat;
+    document.getElementById('loc-longitude').value = lon;
+    setDireccionStatus('Leyendo direccion del punto seleccionado...', 'neutral');
+
+    try {
+        const result = await direccionDesdeCoordenadas(lat, lon);
+        const address = result.display_name || document.getElementById('loc-address').value;
+        document.getElementById('loc-address').value = address;
+        document.getElementById('loc-address').dataset.resolvedAddress = address.trim();
+        setDireccionStatus('Punto del mapa ligado a esta direccion.', 'ok');
+    } catch (error) {
+        document.getElementById('loc-address').dataset.resolvedAddress = document.getElementById('loc-address').value.trim();
+        setDireccionStatus('Punto del mapa tomado. Puedes escribir la direccion manualmente.', 'warn');
+    }
 }
 
 async function guardarUbicacion(event) {
     event.preventDefault();
+    const addressInput = document.getElementById('loc-address');
+    const necesitaUbicar = !coordenadasValidas() || addressInput.value.trim() !== (addressInput.dataset.resolvedAddress || '');
+    if (necesitaUbicar) {
+        const ubicada = await geocodificarDireccion({ enfocar: false });
+        if (!ubicada) {
+            toast('No se pudo ubicar la direccion', 'error');
+            return;
+        }
+    }
     const id = document.getElementById('loc-id').value;
     const payload = {
         cliente_id: document.getElementById('loc-cliente').value,
@@ -249,7 +381,7 @@ async function guardarUbicacion(event) {
         : await api.post('/api/mapa-inventario/locations', payload);
     if (!res.ok) return toast(res.error || 'No se pudo guardar', 'error');
     closeModal('modal-ubicacion');
-    toast('Ubicacion guardada');
+    toast('Ubicacion guardada y ligada al cliente');
     await refrescarTodo();
 }
 

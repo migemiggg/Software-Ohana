@@ -108,8 +108,11 @@
                     <input type="text" id="rec-nombre" class="form-control" required>
                 </div>
                 <div class="form-group">
-                    <label>Producto terminado *</label>
-                    <select id="rec-producto" class="form-control" required></select>
+                    <label>Unidad de venta *</label>
+                    <select id="rec-unidad" class="form-control" required>
+                        <option>lt</option><option>pza</option><option>kg</option>
+                        <option>caja</option><option>bolsa</option><option>ml</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Produccion base</label>
@@ -138,22 +141,61 @@
 <div id="toast"></div>
 <script src="/js/app.js"></script>
 <script>
-let recetas = [], productos = [], productosTerminados = [], recetaSelId = null, recetaEnEdicion = null;
+let recetas = [], productos = [], recetaSelId = null, recetaEnEdicion = null;
+
+function productoPorId(id) {
+    return productos.find(p => String(p.id) === String(id));
+}
+
+function numeroLimpio(valor, maxDecimales = 3) {
+    const n = Number(valor || 0);
+    return n.toLocaleString('es-MX', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDecimales
+    });
+}
+
+function cantidadParaUso(cantidad, unidad) {
+    const n = Number(cantidad || 0);
+    if (unidad === 'kg') return `${numeroLimpio(n * 1000, 2)} g`;
+    if (unidad === 'lt') return `${numeroLimpio(n * 1000, 2)} ml`;
+    return `${numeroLimpio(n, 3)} ${unidad}`;
+}
+
+function stockParaVista(cantidad, unidad) {
+    const decimales = unidad === 'pza' ? 0 : 2;
+    return `${numeroLimpio(cantidad, decimales)} ${unidad}`;
+}
+
+function cantidadParaFormulario(cantidad, unidad) {
+    const n = Number(cantidad || 0);
+    if (unidad === 'kg' || unidad === 'lt') return numeroLimpio(n * 1000, 2);
+    return numeroLimpio(n, 3);
+}
+
+function cantidadDesdeFormulario(cantidad, unidad) {
+    const n = Number(cantidad || 0);
+    return unidad === 'kg' || unidad === 'lt' ? Number((n / 1000).toFixed(6)) : n;
+}
+
+function textoCantidadIngrediente(unidad) {
+    if (unidad === 'kg' || unidad === 'g') return 'Cantidad (g)';
+    if (unidad === 'lt' || unidad === 'ml') return 'Cantidad (ml)';
+    return `Cantidad (${unidad || 'unidad'})`;
+}
+
+function actualizarUnidadIngrediente(select) {
+    const row = select.closest('.ingrediente-row');
+    const producto = productoPorId(select.value);
+    const label = row?.querySelector('.ing-cant-label');
+    if (label) label.textContent = textoCantidadIngrediente(producto?.unidad);
+}
 
 async function cargar() {
     const allProductos = await api.get('/api/productos');
-    [recetas, productosTerminados] = await Promise.all([
-        api.get('/api/recetas'),
-        api.get('/api/productos?categoria=Productos')
-    ]);
+    recetas = await api.get('/api/recetas');
     productos = allProductos.filter(p => p.categoria !== 'Productos');
     renderLista();
-    renderProductoTerminadoSelect();
-}
-
-function renderProductoTerminadoSelect() {
-    const opts = productosTerminados.map(p => `<option value="${p.id}">${p.nombre} (${p.unidad})</option>`).join('');
-    document.getElementById('rec-producto').innerHTML = opts || '<option value="">No hay productos terminados</option>';
 }
 
 function renderLista() {
@@ -192,8 +234,8 @@ async function calcular() {
         ? res.ingredientes.map(i => `
             <tr>
                 <td>${i.producto}</td>
-                <td><strong>${i.cantidad_necesaria}</strong> ${i.unidad}</td>
-                <td>${i.stock_actual} ${i.unidad}</td>
+                <td><strong>${cantidadParaUso(i.cantidad_necesaria, i.unidad)}</strong></td>
+                <td>${stockParaVista(i.stock_actual, i.unidad)}</td>
                 <td>${i.suficiente
                     ? '<span class="badge badge-green">Suficiente</span>'
                     : '<span class="badge badge-red">Sin stock</span>'}</td>
@@ -214,7 +256,9 @@ async function registrarProduccion() {
     }
 
     if (res.faltantes && res.faltantes.length) {
-        const lista = res.faltantes.map(f => `${f.producto}: ${f.stock_actual}/${f.necesario} ${f.unidad}`).join(', ');
+        const lista = res.faltantes.map(f =>
+            `${f.producto}: ${stockParaVista(f.stock_actual, f.unidad)} disponible / ${cantidadParaUso(f.necesario, f.unidad)} necesario`
+        ).join(', ');
         toast(lista, 'error');
     } else {
         toast(res.error || 'No se pudo registrar produccion', 'error');
@@ -225,7 +269,7 @@ function abrirModalReceta() {
     recetaEnEdicion = null;
     document.getElementById('form-receta').reset();
     document.getElementById('ingredientes-form').innerHTML = '';
-    renderProductoTerminadoSelect();
+    document.getElementById('rec-unidad').value = 'lt';
     document.getElementById('modal-receta-titulo').textContent = 'Nueva Receta';
     openModal('modal-receta');
 }
@@ -238,23 +282,25 @@ async function editarRecetaSel() {
     
     document.getElementById('rec-nombre').value = res.nombre;
     document.getElementById('rec-desc').value = res.descripcion || '';
-    document.getElementById('rec-producto').value = res.producto_id || '';
+    document.getElementById('rec-unidad').value = res.producto_unidad || 'lt';
     document.getElementById('rec-porciones').value = res.porciones;
     
     document.getElementById('ingredientes-form').innerHTML = '';
     if (res.ingredientes && res.ingredientes.length) {
         for (const ing of res.ingredientes) {
+            const producto = productoPorId(ing.producto_id);
             const opts = productos.map(p => `<option value="${p.id}" ${p.id == ing.producto_id ? 'selected' : ''}>${p.nombre} (${p.unidad})</option>`).join('');
             const div  = document.createElement('div');
+            div.className = 'ingrediente-row';
             div.style  = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
             div.innerHTML = `
                 <div class="form-group" style="margin:0">
                     <label style="font-size:.75rem">Ingrediente</label>
-                    <select class="form-control ing-prod">${opts}</select>
+                    <select class="form-control ing-prod" onchange="actualizarUnidadIngrediente(this)">${opts}</select>
                 </div>
                 <div class="form-group" style="margin:0">
-                    <label style="font-size:.75rem">Cantidad</label>
-                    <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="${ing.cantidad}" required>
+                    <label class="ing-cant-label" style="font-size:.75rem">${textoCantidadIngrediente(producto?.unidad)}</label>
+                    <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="${cantidadParaFormulario(ing.cantidad, producto?.unidad)}" required>
                 </div>
                 <button type="button" onclick="this.parentElement.remove()" style="padding:.4rem .5rem;border:1px solid #e5e7eb;background:#fff;border-radius:5px;cursor:pointer;color:#6b7280;margin-bottom:1px">&#x2715;</button>`;
             document.getElementById('ingredientes-form').appendChild(div);
@@ -267,16 +313,18 @@ async function editarRecetaSel() {
 
 function agregarIngrediente() {
     const opts = productos.map(p => `<option value="${p.id}">${p.nombre} (${p.unidad})</option>`).join('');
+    const producto = productos[0];
     const div  = document.createElement('div');
+    div.className = 'ingrediente-row';
     div.style  = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
     div.innerHTML = `
         <div class="form-group" style="margin:0">
             <label style="font-size:.75rem">Ingrediente</label>
-            <select class="form-control ing-prod">${opts}</select>
+            <select class="form-control ing-prod" onchange="actualizarUnidadIngrediente(this)">${opts}</select>
         </div>
         <div class="form-group" style="margin:0">
-            <label style="font-size:.75rem">Cantidad</label>
-            <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="1" required>
+            <label class="ing-cant-label" style="font-size:.75rem">${textoCantidadIngrediente(producto?.unidad)}</label>
+            <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="${['kg','g','lt','ml'].includes(producto?.unidad) ? 100 : 1}" required>
         </div>
         <button type="button" onclick="this.parentElement.remove()" style="padding:.4rem .5rem;border:1px solid #e5e7eb;background:#fff;border-radius:5px;cursor:pointer;color:#6b7280;margin-bottom:1px">&#x2715;</button>`;
     document.getElementById('ingredientes-form').appendChild(div);
@@ -284,14 +332,18 @@ function agregarIngrediente() {
 
 async function guardarReceta(e) {
     e.preventDefault();
-    const ingredientes = [...document.querySelectorAll('#ingredientes-form > div')].map(d => ({
-        producto_id: d.querySelector('.ing-prod').value,
-        cantidad:    parseFloat(d.querySelector('.ing-cant').value)
-    }));
+    const ingredientes = [...document.querySelectorAll('#ingredientes-form > div')].map(d => {
+        const productoId = d.querySelector('.ing-prod').value;
+        const producto = productoPorId(productoId);
+        return {
+            producto_id: productoId,
+            cantidad:    cantidadDesdeFormulario(d.querySelector('.ing-cant').value, producto?.unidad)
+        };
+    });
     const datos = {
         nombre:      document.getElementById('rec-nombre').value,
         descripcion: document.getElementById('rec-desc').value,
-        producto_id:  document.getElementById('rec-producto').value,
+        unidad:      document.getElementById('rec-unidad').value,
         porciones:   parseFloat(document.getElementById('rec-porciones').value) || 1,
         ingredientes
     };
@@ -305,14 +357,14 @@ async function guardarReceta(e) {
     
     if (res.ok) { 
         closeModal('modal-receta'); 
-        toast(recetaEnEdicion ? 'Receta actualizada' : 'Receta guardada'); 
+        toast(recetaEnEdicion ? 'Producto actualizado en inventario' : 'Producto creado en inventario'); 
         await cargar(); 
     }
     else toast(res.error || 'Error', 'error');
 }
 
 async function eliminarRecetaSel() {
-    if (!recetaSelId || !confirmar('Eliminar esta receta?')) return;
+    if (!recetaSelId || !confirmar('Eliminar este registro tambien eliminara el producto terminado en inventario. Continuar?')) return;
     await api.delete(`/api/recetas/${recetaSelId}`);
     recetaSelId = null;
     document.getElementById('panel-calcular').style.display = 'none';

@@ -45,6 +45,8 @@
         </div>
 
         <div class="page-body">
+            <div id="resumen-pedidos" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.75rem;margin-bottom:.875rem"></div>
+
             <div style="display:flex;gap:.4rem;margin-bottom:.875rem;flex-wrap:wrap">
                 <button class="btn-outline filtro-btn active" onclick="setFiltro(this,'')">Todos</button>
                 <button class="btn-outline filtro-btn" onclick="setFiltro(this,'pendiente')">Pendientes</button>
@@ -56,7 +58,7 @@
             <div class="table-card">
                 <table>
                     <thead>
-                        <tr><th>#</th><th>Cliente</th><th>Contacto</th><th>Estado</th><th>Total</th><th>Pedido</th><th>Entrega</th><th>Acciones</th></tr>
+                        <tr><th>Pedido</th><th>Cliente</th><th>Productos</th><th>Estado</th><th>Total</th><th>Entrega</th><th>Siguiente paso</th><th>Acciones</th></tr>
                     </thead>
                     <tbody id="tbl-pedidos">
                         <tr><td colspan="8" style="text-align:center;padding:2rem;color:#9ca3af">Cargando...</td></tr>
@@ -158,11 +160,16 @@ async function cargar() {
         api.get('/api/pedidos'), api.get('/api/productos?categoria=Productos'), api.get('/api/clientes')
     ]);
     renderClientes();
+    renderResumen();
     renderTabla();
 }
 
 function renderClientes() {
-    const opts = clientesDisp.map(c => `<option value="${c.id}" data-contacto="${c.contacto || ''}">${c.nombre}</option>`).join('');
+    const opts = clientesDisp.map(c => `
+        <option value="${c.id}" data-contacto="${c.contacto || ''}" data-location="${c.location_id || ''}" data-direccion="${c.direccion || ''}">
+            ${c.nombre}
+        </option>
+    `).join('');
     document.getElementById('ped-cliente-id').innerHTML = '<option value="">Seleccionar cliente...</option>' + opts;
 }
 
@@ -173,34 +180,106 @@ function setFiltro(btn, estado) {
     renderTabla();
 }
 
+function numeroLimpio(valor, maxDecimales = 2) {
+    return Number(valor || 0).toLocaleString('es-MX', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDecimales
+    });
+}
+
+function cantidadConUnidad(valor, unidad) {
+    const decimales = ['pza', 'caja', 'bolsa'].includes(unidad) ? 0 : 2;
+    return `${numeroLimpio(valor, decimales)} ${unidad || ''}`.trim();
+}
+
+function renderResumen() {
+    const cuenta = estado => todosPedidos.filter(p => p.estado === estado).length;
+    const hoy = new Date().toISOString().slice(0, 10);
+    const porEntregarHoy = todosPedidos.filter(p =>
+        p.estado !== 'entregado' && p.estado !== 'cancelado' &&
+        p.fecha_entrega && String(p.fecha_entrega).slice(0, 10) <= hoy
+    ).length;
+    const cards = [
+        ['Pendientes', cuenta('pendiente'), '#fef3c7'],
+        ['En proceso', cuenta('en_proceso'), '#dbeafe'],
+        ['Por entregar', porEntregarHoy, '#e0f2fe'],
+        ['Entregados', cuenta('entregado'), '#dcfce7']
+    ];
+    document.getElementById('resumen-pedidos').innerHTML = cards.map(([label, value, bg]) => `
+        <div style="background:${bg};border:1px solid rgba(15,23,42,.06);border-radius:8px;padding:.8rem .9rem">
+            <div style="font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase">${label}</div>
+            <div style="font-size:1.45rem;font-weight:800;color:#172033;line-height:1.2">${value}</div>
+        </div>
+    `).join('');
+}
+
+function productosResumen(p) {
+    return p.productos_resumen || `${numeroLimpio(p.cantidad_productos || 0)} producto(s)`;
+}
+
+function ubicacionResumen(p) {
+    if (!p.ubicacion_nombre && !p.ubicacion_direccion) return '<br><small style="color:#94a3b8">Sin ubicacion ligada</small>';
+    const texto = [p.ubicacion_nombre, p.ubicacion_direccion].filter(Boolean).join(' - ');
+    return `<br><small style="color:#0f8fc9">${texto}</small>`;
+}
+
+function siguientePaso(p) {
+    if (!p.location_id && !['entregado', 'cancelado'].includes(p.estado)) return 'Asignar ubicacion del cliente';
+    if (p.estado === 'pendiente') return 'Preparar pedido';
+    if (p.estado === 'en_proceso') return 'Entregar y descontar inventario';
+    if (p.estado === 'entregado') return p.inventario_descontado ? 'Inventario descontado' : 'Entregado';
+    if (p.estado === 'cancelado') return 'Sin movimiento pendiente';
+    return 'Revisar';
+}
+
+function actionButton(label, icon, tipo, action) {
+    const cls = tipo === 'primary' ? 'btn-ohana' : tipo === 'danger' ? 'btn-outline danger' : 'btn-outline';
+    return `<button class="${cls}" onclick="${action}" style="padding:.32rem .55rem;font-size:.75rem">
+        <i data-lucide="${icon}"></i> ${label}
+    </button>`;
+}
+
+function botonesPedido(p) {
+    const buttons = [`<button class="btn-outline" onclick="verDetalle(${p.id})" style="padding:.32rem .55rem;font-size:.75rem"><i data-lucide="eye"></i> Ver</button>`];
+    if (p.estado === 'pendiente') {
+        buttons.push(actionButton('Preparar', 'play', 'normal', `cambiarEstado(${p.id},'en_proceso')`));
+        buttons.push(actionButton('Entregar', 'package-check', 'primary', `entregarPedido(${p.id})`));
+        buttons.push(actionButton('Cancelar', 'ban', 'normal', `cancelarPedido(${p.id})`));
+    } else if (p.estado === 'en_proceso') {
+        buttons.push(actionButton('Entregar', 'package-check', 'primary', `entregarPedido(${p.id})`));
+        buttons.push(actionButton('Pausar', 'pause', 'normal', `cambiarEstado(${p.id},'pendiente')`));
+        buttons.push(actionButton('Cancelar', 'ban', 'normal', `cancelarPedido(${p.id})`));
+    } else if (p.estado === 'entregado') {
+        buttons.push(actionButton('Reabrir', 'rotate-ccw', 'normal', `reabrirPedido(${p.id})`));
+    } else if (p.estado === 'cancelado') {
+        buttons.push(actionButton('Reabrir', 'rotate-ccw', 'normal', `cambiarEstado(${p.id},'pendiente')`));
+    }
+    buttons.push(`<button class="btn-icon danger" title="Eliminar" onclick="eliminarPedido(${p.id})"><i data-lucide="trash-2"></i></button>`);
+    return buttons.join('');
+}
+
 function renderTabla() {
     const lista  = filtroEstado ? todosPedidos.filter(p => p.estado === filtroEstado) : todosPedidos;
     const tbody  = document.getElementById('tbl-pedidos');
     tbody.innerHTML = lista.length ? lista.map(p => `
         <tr>
-            <td><strong>#${p.id}</strong></td>
-            <td>${p.cliente_normalizado || p.cliente_nombre}</td>
-            <td style="color:#6b7280;font-size:.8rem">${p.cliente_contacto_normalizado || p.cliente_contacto || '&mdash;'}</td>
+            <td><strong>#${p.id}</strong><br><small style="color:#94a3b8">${fmtFecha(p.fecha_pedido)}</small></td>
+            <td><strong>${p.cliente_normalizado || p.cliente_nombre}</strong><br><small style="color:#6b7280">${p.cliente_contacto_normalizado || p.cliente_contacto || '&mdash;'}</small>${ubicacionResumen(p)}</td>
+            <td style="max-width:260px;color:#334155">${productosResumen(p)}</td>
             <td>${estadoBadge(p.estado)}</td>
             <td><strong>${fmt(p.total)}</strong></td>
-            <td>${fmtFecha(p.fecha_pedido)}</td>
             <td>${fmtFecha(p.fecha_entrega)}</td>
-            <td style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap">
-                <button class="btn-icon" title="Ver detalle" onclick="verDetalle(${p.id})"><i data-lucide="eye"></i></button>
-                <select onchange="cambiarEstado(${p.id},this.value)" class="form-control" style="padding:.2rem .35rem;font-size:.75rem;width:auto;height:auto">
-                    ${['pendiente','en_proceso','entregado','cancelado'].map(e =>
-                        `<option value="${e}" ${p.estado===e?'selected':''}>${e.replace('_',' ')}</option>`
-                    ).join('')}
-                </select>
-                <button class="btn-icon danger" title="Eliminar" onclick="eliminarPedido(${p.id})"><i data-lucide="trash-2"></i></button>
-            </td>
+            <td style="color:#64748b;font-size:.82rem">${siguientePaso(p)}</td>
+            <td><div style="display:flex;gap:.35rem;align-items:center;flex-wrap:wrap">${botonesPedido(p)}</div></td>
         </tr>`).join('')
     : '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#9ca3af">Sin pedidos</td></tr>';
     lucide.createIcons();
 }
 
 function agregarLinea() {
-    const opts = productosDisp.map(p => `<option value="${p.id}" data-precio="${p.precio_unitario}">${p.nombre} (${p.stock_actual} ${p.unidad})</option>`).join('');
+    const opts = productosDisp.map(p =>
+        `<option value="${p.id}" data-precio="${p.precio_unitario}">${p.nombre} - stock ${cantidadConUnidad(p.stock_actual, p.unidad)} - ${fmt(p.precio_unitario)}</option>`
+    ).join('');
     const div  = document.createElement('div');
     div.className = 'linea-pedido';
     div.style = 'display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
@@ -228,10 +307,15 @@ function abrirPedido() {
         abrirCliente();
         return;
     }
+    if (!productosDisp.length) {
+        toast('Primero registra productos terminados', 'warn');
+        return;
+    }
     document.getElementById('form-pedido').reset();
     document.getElementById('lineas-pedido').innerHTML = '';
     document.getElementById('ped-location-id').innerHTML = '<option value="">Sin ubicacion asignada</option>';
     document.getElementById('total-pedido').textContent = fmt(0);
+    agregarLinea();
     openModal('modal-pedido');
 }
 
@@ -271,8 +355,13 @@ async function cargarUbicacionesCliente() {
     }
 
     const ubicaciones = await api.get(`/api/clientes/${clienteId}/locations`);
-    locationSelect.innerHTML = '<option value="">Sin ubicacion asignada</option>' +
+    if (!ubicaciones.length) {
+        locationSelect.innerHTML = '<option value="">Sin ubicacion registrada</option>';
+        return;
+    }
+    locationSelect.innerHTML = '<option value="">Usar ubicacion principal del cliente</option>' +
         ubicaciones.map(u => `<option value="${u.id}">${u.name} - ${u.address}</option>`).join('');
+    locationSelect.value = ubicaciones[0].id;
 }
 
 function actualizarPrecio(sel) {
@@ -297,7 +386,8 @@ async function guardarPedido(e) {
     }));
     if (!lineas.length) { toast('Agrega al menos un producto', 'warn'); return; }
     const clienteSelect = document.getElementById('ped-cliente-id');
-    const clienteNombre = clienteSelect.options[clienteSelect.selectedIndex]?.textContent || '';
+    const cliente = clientesDisp.find(c => String(c.id) === String(clienteSelect.value));
+    const clienteNombre = cliente?.nombre || clienteSelect.options[clienteSelect.selectedIndex]?.textContent || '';
     const res = await api.post('/api/pedidos', {
         cliente_id:       clienteSelect.value,
         location_id:      document.getElementById('ped-location-id').value || null,
@@ -317,9 +407,42 @@ async function guardarPedido(e) {
 }
 
 async function cambiarEstado(id, estado) {
-    await api.patch(`/api/pedidos/${id}/estado`, { estado });
-    toast('Estado actualizado');
+    const res = await api.patch(`/api/pedidos/${id}/estado`, { estado });
+    if (!res.ok) {
+        const faltantes = (res.faltantes || []).map(f =>
+            `${f.producto}: ${cantidadConUnidad(f.stock_actual, f.unidad)} disponible / ${cantidadConUnidad(f.necesario, f.unidad)} necesario`
+        ).join(', ');
+        toast(faltantes || res.error || 'No se pudo actualizar el pedido', 'error');
+        await cargar();
+        return;
+    }
+    if (res.descontado) toast('Pedido entregado e inventario descontado');
+    else if (res.restituido) toast('Estado actualizado e inventario restituido');
+    else toast('Estado actualizado');
     await cargar();
+}
+
+async function entregarPedido(id) {
+    if (!confirmar('Entregar este pedido descontara los productos del inventario. Continuar?')) return;
+    await cambiarEstado(id, 'entregado');
+}
+
+async function cancelarPedido(id) {
+    const pedido = todosPedidos.find(p => p.id === id);
+    const msg = pedido?.estado === 'entregado'
+        ? 'Cancelar un pedido entregado regresara los productos al inventario. Continuar?'
+        : 'Cancelar este pedido?';
+    if (!confirmar(msg)) return;
+    await cambiarEstado(id, 'cancelado');
+}
+
+async function reabrirPedido(id) {
+    const pedido = todosPedidos.find(p => p.id === id);
+    const msg = pedido?.estado === 'entregado'
+        ? 'Reabrir este pedido regresara los productos al inventario. Continuar?'
+        : 'Reabrir este pedido como pendiente?';
+    if (!confirmar(msg)) return;
+    await cambiarEstado(id, 'pendiente');
 }
 
 async function verDetalle(id) {
@@ -333,6 +456,7 @@ async function verDetalle(id) {
             <div><strong>Pedido:</strong> ${fmtFecha(p.fecha_pedido)}</div>
             <div><strong>Entrega:</strong> ${fmtFecha(p.fecha_entrega)}</div>
             <div><strong>Total:</strong> <strong>${fmt(p.total)}</strong></div>
+            <div style="grid-column:1/-1"><strong>Inventario:</strong> ${p.inventario_descontado ? 'Ya descontado' : 'Sin descontar'}</div>
             ${p.notas ? `<div style="grid-column:1/-1"><strong>Notas:</strong> ${p.notas}</div>` : ''}
         </div>
         <table>
@@ -340,7 +464,7 @@ async function verDetalle(id) {
             <tbody>${(p.detalles||[]).map(d => `
                 <tr>
                     <td>${d.producto_nombre}</td>
-                    <td>${d.cantidad} ${d.unidad}</td>
+                    <td>${cantidadConUnidad(d.cantidad, d.unidad)}</td>
                     <td>${fmt(d.precio)}</td>
                     <td>${fmt(d.cantidad*d.precio)}</td>
                 </tr>`).join('')}

@@ -15,6 +15,8 @@ function numberOrNull(value) {
 function getLocationWithInventory(id) {
     const location = db.prepare(`
         SELECT l.*,
+               MIN(c.id) AS cliente_id,
+               GROUP_CONCAT(DISTINCT c.id) AS cliente_ids,
                GROUP_CONCAT(c.nombre, ', ') AS clientes
         FROM locations l
         LEFT JOIN cliente_locations cl ON cl.location_id = l.id
@@ -107,6 +109,8 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
 
     const locations = db.prepare(`
         SELECT l.*,
+               MIN(c.id) AS cliente_id,
+               GROUP_CONCAT(DISTINCT c.id) AS cliente_ids,
                GROUP_CONCAT(DISTINCT c.nombre) AS clientes,
                (
                    SELECT COUNT(*)
@@ -158,7 +162,7 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
         JOIN productos pr ON pr.id = d.producto_id
         JOIN categorias cat ON cat.id = pr.categoria_id
         WHERE p.location_id = ?
-          AND p.estado <> 'cancelado'
+          AND p.estado NOT IN ('cancelado', 'entregado')
           AND lower(cat.nombre) = lower('Productos')
         ORDER BY p.fecha_pedido DESC
         LIMIT 20
@@ -186,6 +190,9 @@ router.post('/api/mapa-inventario/locations', requireRoles('admin'), (req, res) 
         return res.status(400).json({ error: 'Cliente, nombre, direccion, latitud y longitud son requeridos.' });
     }
 
+    const cliente = db.prepare('SELECT id FROM clientes WHERE id = ?').get(cliente_id);
+    if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+
     const info = db.transaction(() => {
         const inserted = db.prepare(`
             INSERT INTO locations (name, address, latitude, longitude, description)
@@ -196,6 +203,13 @@ router.post('/api/mapa-inventario/locations', requireRoles('admin'), (req, res) 
             INSERT OR IGNORE INTO cliente_locations (cliente_id, location_id)
             VALUES (?, ?)
         `).run(cliente_id, inserted.lastInsertRowid);
+        db.prepare(`
+            UPDATE pedidos
+            SET location_id = ?
+            WHERE cliente_id = ?
+              AND location_id IS NULL
+        `).run(inserted.lastInsertRowid, cliente_id);
+        db.prepare('UPDATE clientes SET actualizado_en = datetime("now") WHERE id = ?').run(cliente_id);
 
         return inserted;
     })();
@@ -212,6 +226,9 @@ router.put('/api/mapa-inventario/locations/:id', requireRoles('admin'), (req, re
         return res.status(400).json({ error: 'Cliente, nombre, direccion, latitud y longitud son requeridos.' });
     }
 
+    const cliente = db.prepare('SELECT id FROM clientes WHERE id = ?').get(cliente_id);
+    if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado.' });
+
     db.transaction(() => {
         db.prepare(`
             UPDATE locations
@@ -224,6 +241,13 @@ router.put('/api/mapa-inventario/locations/:id', requireRoles('admin'), (req, re
             INSERT OR IGNORE INTO cliente_locations (cliente_id, location_id)
             VALUES (?, ?)
         `).run(cliente_id, req.params.id);
+        db.prepare(`
+            UPDATE pedidos
+            SET location_id = ?
+            WHERE cliente_id = ?
+              AND location_id IS NULL
+        `).run(req.params.id, cliente_id);
+        db.prepare('UPDATE clientes SET actualizado_en = datetime("now") WHERE id = ?').run(cliente_id);
     })();
 
     res.json({ ok: true });
@@ -337,7 +361,47 @@ router.get('/api/clientes', (req, res) => {
 
     const rows = db.prepare(`
         SELECT c.*,
-               COUNT(cl.location_id) AS ubicaciones
+               COUNT(cl.location_id) AS ubicaciones,
+               (
+                   SELECT l2.id
+                   FROM cliente_locations cl2
+                   JOIN locations l2 ON l2.id = cl2.location_id
+                   WHERE cl2.cliente_id = c.id
+                   ORDER BY datetime(l2.updated_at) DESC, l2.id DESC
+                   LIMIT 1
+               ) AS location_id,
+               (
+                   SELECT l2.name
+                   FROM cliente_locations cl2
+                   JOIN locations l2 ON l2.id = cl2.location_id
+                   WHERE cl2.cliente_id = c.id
+                   ORDER BY datetime(l2.updated_at) DESC, l2.id DESC
+                   LIMIT 1
+               ) AS ubicacion_nombre,
+               (
+                   SELECT l2.address
+                   FROM cliente_locations cl2
+                   JOIN locations l2 ON l2.id = cl2.location_id
+                   WHERE cl2.cliente_id = c.id
+                   ORDER BY datetime(l2.updated_at) DESC, l2.id DESC
+                   LIMIT 1
+               ) AS direccion,
+               (
+                   SELECT l2.latitude
+                   FROM cliente_locations cl2
+                   JOIN locations l2 ON l2.id = cl2.location_id
+                   WHERE cl2.cliente_id = c.id
+                   ORDER BY datetime(l2.updated_at) DESC, l2.id DESC
+                   LIMIT 1
+               ) AS latitude,
+               (
+                   SELECT l2.longitude
+                   FROM cliente_locations cl2
+                   JOIN locations l2 ON l2.id = cl2.location_id
+                   WHERE cl2.cliente_id = c.id
+                   ORDER BY datetime(l2.updated_at) DESC, l2.id DESC
+                   LIMIT 1
+               ) AS longitude
         FROM clientes c
         LEFT JOIN cliente_locations cl ON cl.cliente_id = c.id
         ${where}
@@ -365,7 +429,7 @@ router.get('/api/clientes/:id/locations', (req, res) => {
         FROM locations l
         JOIN cliente_locations cl ON cl.location_id = l.id
         WHERE cl.cliente_id = ?
-        ORDER BY l.name
+        ORDER BY datetime(l.updated_at) DESC, l.id DESC
     `).all(req.params.id);
     res.json(rows);
 });

@@ -5,6 +5,120 @@ const router  = express.Router();
 
 router.use(requireLogin);
 
+function parseIngredientes(ingredientes, productoTerminadoId) {
+    if (!Array.isArray(ingredientes) || !ingredientes.length) {
+        const err = new Error('Agrega al menos un ingrediente a la receta.');
+        err.status = 400;
+        throw err;
+    }
+
+    const getProducto = db.prepare(`
+        SELECT p.id, p.nombre, c.nombre AS categoria
+        FROM productos p
+        LEFT JOIN categorias c ON c.id = p.categoria_id
+        WHERE p.id = ?
+    `);
+    const agrupados = new Map();
+
+    for (const ing of ingredientes) {
+        const producto_id = Number(ing.producto_id);
+        const cantidad = Number(ing.cantidad);
+        if (!producto_id || !Number.isFinite(cantidad) || cantidad <= 0) {
+            const err = new Error('Cada ingrediente necesita producto y cantidad mayor a 0.');
+            err.status = 400;
+            throw err;
+        }
+        if (String(producto_id) === String(productoTerminadoId)) {
+            const err = new Error('El producto terminado no puede usarse como ingrediente de su propia receta.');
+            err.status = 400;
+            throw err;
+        }
+
+        const producto = getProducto.get(producto_id);
+        if (!producto) {
+            const err = new Error('Uno de los ingredientes no existe en inventario.');
+            err.status = 400;
+            throw err;
+        }
+        if (producto.categoria === 'Productos') {
+            const err = new Error('Los ingredientes deben ser insumos, no productos terminados.');
+            err.status = 400;
+            throw err;
+        }
+
+        agrupados.set(producto_id, (agrupados.get(producto_id) || 0) + cantidad);
+    }
+
+    return [...agrupados.entries()].map(([producto_id, cantidad]) => ({
+        producto_id,
+        cantidad: Number(cantidad.toFixed(3))
+    }));
+}
+
+function handleError(res, error) {
+    res.status(error.status || 500).json({ error: error.message || 'Error inesperado.' });
+}
+
+function getCategoriaId(nombre) {
+    let categoria = db.prepare('SELECT id FROM categorias WHERE lower(nombre) = lower(?)').get(nombre);
+    if (!categoria) {
+        const info = db.prepare('INSERT INTO categorias (nombre, descripcion) VALUES (?, ?)')
+            .run(nombre, nombre === 'Productos' ? 'Productos terminados para venta' : null);
+        categoria = { id: info.lastInsertRowid };
+    }
+    return categoria.id;
+}
+
+function calcularCostoUnitario(ingredientes, porcionesBase) {
+    const getProducto = db.prepare('SELECT precio_unitario FROM productos WHERE id = ?');
+    const costoTotal = ingredientes.reduce((total, ing) => {
+        const producto = getProducto.get(ing.producto_id);
+        return total + (Number(producto?.precio_unitario || 0) * Number(ing.cantidad));
+    }, 0);
+    return Number((costoTotal / porcionesBase).toFixed(2));
+}
+
+function upsertProductoTerminado({ producto_id, nombre, descripcion, unidad, porcionesBase, ingredientes }) {
+    const categoriaId = getCategoriaId('Productos');
+    const costoUnitario = calcularCostoUnitario(ingredientes, porcionesBase);
+    const unidadVenta = unidad || 'pza';
+
+    let producto = producto_id
+        ? db.prepare('SELECT * FROM productos WHERE id = ?').get(producto_id)
+        : db.prepare(`
+            SELECT p.*
+            FROM productos p
+            LEFT JOIN categorias c ON c.id = p.categoria_id
+            WHERE lower(p.nombre) = lower(?)
+              AND lower(COALESCE(c.nombre, '')) = lower('Productos')
+            LIMIT 1
+        `).get(nombre);
+
+    if (producto) {
+        db.prepare(`
+            UPDATE productos
+            SET nombre = ?, descripcion = ?, categoria_id = ?, unidad = ?,
+                stock_minimo = 0,
+                precio_unitario = ?, actualizado_en = datetime('now')
+            WHERE id = ?
+        `).run(nombre, descripcion || null, categoriaId, unidadVenta, costoUnitario, producto.id);
+        return { id: producto.id, costo_unitario: costoUnitario };
+    }
+
+    const info = db.prepare(`
+        INSERT INTO productos (nombre, descripcion, categoria_id, unidad, stock_actual, stock_minimo, precio_unitario)
+        VALUES (?, ?, ?, ?, 0, 0, ?)
+    `).run(nombre, descripcion || null, categoriaId, unidadVenta, costoUnitario);
+    return { id: info.lastInsertRowid, costo_unitario: costoUnitario };
+}
+
+function eliminarProductoTerminado(productoId) {
+    if (!productoId) return;
+    db.prepare('DELETE FROM pedido_detalles WHERE producto_id = ?').run(productoId);
+    db.prepare('DELETE FROM location_inventory WHERE producto_id = ?').run(productoId);
+    db.prepare('DELETE FROM productos WHERE id = ?').run(productoId);
+}
+
 // Listar recetas
 router.get('/api/recetas', (req, res) => {
     const rows = db.prepare(`
@@ -38,89 +152,110 @@ router.get('/api/recetas/:id', (req, res) => {
 
 // Crear receta
 router.post('/api/recetas', (req, res) => {
-    const { nombre, descripcion, producto_id, porciones, ingredientes } = req.body;
-    if (!nombre) return res.status(400).json({ error: 'El nombre es requerido.' });
-    if (!producto_id) return res.status(400).json({ error: 'Selecciona el producto terminado que produce la receta.' });
+    try {
+        const { nombre, descripcion, unidad, porciones, ingredientes } = req.body;
+        if (!nombre) return res.status(400).json({ error: 'El nombre es requerido.' });
+        const porcionesBase = Number(porciones);
+        if (!Number.isFinite(porcionesBase) || porcionesBase <= 0) {
+            return res.status(400).json({ error: 'La produccion base debe ser mayor a 0.' });
+        }
 
-    const productoTerminado = db.prepare(`
-        SELECT p.id, c.nombre AS categoria
-        FROM productos p
-        LEFT JOIN categorias c ON c.id = p.categoria_id
-        WHERE p.id = ?
-    `).get(producto_id);
-    if (!productoTerminado || productoTerminado.categoria !== 'Productos') {
-        return res.status(400).json({ error: 'La receta debe producir un producto de categoria Productos.' });
-    }
+        const ingredientesNormalizados = parseIngredientes(ingredientes, null);
 
-    // Validar que no exista una receta con el mismo nombre
-    const existente = db.prepare('SELECT id FROM recetas WHERE LOWER(nombre) = LOWER(?)').get(nombre);
-    if (existente) return res.status(400).json({ error: 'Ya existe una receta con este nombre.' });
+        // Validar que no exista una receta con el mismo nombre
+        const existente = db.prepare('SELECT id FROM recetas WHERE LOWER(nombre) = LOWER(?)').get(nombre);
+        if (existente) return res.status(400).json({ error: 'Ya existe una receta con este nombre.' });
 
-    const result = db.transaction(() => {
-        const info = db.prepare(`
-            INSERT INTO recetas (nombre, descripcion, producto_id, porciones) VALUES (?, ?, ?, ?)
-        `).run(nombre, descripcion || null, producto_id || null, porciones || 1);
+        const result = db.transaction(() => {
+            const producto = upsertProductoTerminado({
+                nombre: nombre.trim(),
+                descripcion,
+                unidad,
+                porcionesBase,
+                ingredientes: ingredientesNormalizados
+            });
 
-        const recetaId = info.lastInsertRowid;
+            const recetaLigada = db.prepare('SELECT id FROM recetas WHERE producto_id = ?').get(producto.id);
+            if (recetaLigada) {
+                const err = new Error('Este producto terminado ya tiene un registro ligado.');
+                err.status = 400;
+                throw err;
+            }
 
-        if (ingredientes && ingredientes.length) {
+            const info = db.prepare(`
+                INSERT INTO recetas (nombre, descripcion, producto_id, porciones) VALUES (?, ?, ?, ?)
+            `).run(nombre.trim(), descripcion || null, producto.id, porcionesBase);
+
+            const recetaId = info.lastInsertRowid;
+
             const ins = db.prepare(`
                 INSERT INTO receta_ingredientes (receta_id, producto_id, cantidad) VALUES (?, ?, ?)
             `);
-            for (const ing of ingredientes) {
+            for (const ing of ingredientesNormalizados) {
                 ins.run(recetaId, ing.producto_id, ing.cantidad);
             }
-        }
 
-        return recetaId;
-    })();
+            return { recetaId, producto_id: producto.id, costo_unitario: producto.costo_unitario };
+        })();
 
-    res.json({ ok: true, id: result });
+        res.json({ ok: true, id: result.recetaId, producto_id: result.producto_id, costo_unitario: result.costo_unitario });
+    } catch (error) {
+        handleError(res, error);
+    }
 });
 
 // Editar receta
 router.put('/api/recetas/:id', (req, res) => {
-    const { nombre, descripcion, producto_id, porciones, ingredientes } = req.body;
-    if (!nombre) return res.status(400).json({ error: 'El nombre es requerido.' });
-    if (!producto_id) return res.status(400).json({ error: 'Selecciona el producto terminado que produce la receta.' });
+    try {
+        const { nombre, descripcion, unidad, porciones, ingredientes } = req.body;
+        if (!nombre) return res.status(400).json({ error: 'El nombre es requerido.' });
+        const porcionesBase = Number(porciones);
+        if (!Number.isFinite(porcionesBase) || porcionesBase <= 0) {
+            return res.status(400).json({ error: 'La produccion base debe ser mayor a 0.' });
+        }
 
-    const productoTerminado = db.prepare(`
-        SELECT p.id, c.nombre AS categoria
-        FROM productos p
-        LEFT JOIN categorias c ON c.id = p.categoria_id
-        WHERE p.id = ?
-    `).get(producto_id);
-    if (!productoTerminado || productoTerminado.categoria !== 'Productos') {
-        return res.status(400).json({ error: 'La receta debe producir un producto de categoria Productos.' });
-    }
+        const recetaActual = db.prepare('SELECT * FROM recetas WHERE id = ?').get(req.params.id);
+        if (!recetaActual) return res.status(404).json({ error: 'Receta no encontrada.' });
 
-    // Validar que no exista otra receta con el mismo nombre
-    const existente = db.prepare('SELECT id FROM recetas WHERE LOWER(nombre) = LOWER(?) AND id != ?')
-        .get(nombre, req.params.id);
-    if (existente) return res.status(400).json({ error: 'Ya existe una receta con este nombre.' });
+        const ingredientesNormalizados = parseIngredientes(ingredientes, recetaActual.producto_id);
 
-    const result = db.transaction(() => {
-        db.prepare(`
-            UPDATE recetas SET nombre = ?, descripcion = ?, producto_id = ?, porciones = ? WHERE id = ?
-        `).run(nombre, descripcion || null, producto_id || null, porciones || 1, req.params.id);
+        // Validar que no exista otra receta con el mismo nombre
+        const existente = db.prepare('SELECT id FROM recetas WHERE LOWER(nombre) = LOWER(?) AND id != ?')
+            .get(nombre, req.params.id);
+        if (existente) return res.status(400).json({ error: 'Ya existe una receta con este nombre.' });
 
-        // Eliminar ingredientes anteriores
-        db.prepare('DELETE FROM receta_ingredientes WHERE receta_id = ?').run(req.params.id);
+        const result = db.transaction(() => {
+            const producto = upsertProductoTerminado({
+                producto_id: recetaActual.producto_id,
+                nombre: nombre.trim(),
+                descripcion,
+                unidad,
+                porcionesBase,
+                ingredientes: ingredientesNormalizados
+            });
 
-        // Agregar nuevos ingredientes
-        if (ingredientes && ingredientes.length) {
+            db.prepare(`
+                UPDATE recetas SET nombre = ?, descripcion = ?, producto_id = ?, porciones = ? WHERE id = ?
+            `).run(nombre.trim(), descripcion || null, producto.id, porcionesBase, req.params.id);
+
+            // Eliminar ingredientes anteriores
+            db.prepare('DELETE FROM receta_ingredientes WHERE receta_id = ?').run(req.params.id);
+
+            // Agregar nuevos ingredientes
             const ins = db.prepare(`
                 INSERT INTO receta_ingredientes (receta_id, producto_id, cantidad) VALUES (?, ?, ?)
             `);
-            for (const ing of ingredientes) {
+            for (const ing of ingredientesNormalizados) {
                 ins.run(req.params.id, ing.producto_id, ing.cantidad);
             }
-        }
 
-        return req.params.id;
-    })();
+            return { recetaId: req.params.id, producto_id: producto.id, costo_unitario: producto.costo_unitario };
+        })();
 
-    res.json({ ok: true, id: result });
+        res.json({ ok: true, id: result.recetaId, producto_id: result.producto_id, costo_unitario: result.costo_unitario });
+    } catch (error) {
+        handleError(res, error);
+    }
 });
 
 // Calcular insumos necesarios para N porciones
@@ -173,6 +308,9 @@ router.post('/api/recetas/:id/registrar', (req, res) => {
         JOIN productos p ON p.id = ri.producto_id
         WHERE ri.receta_id = ?
     `).all(req.params.id);
+    if (!ingredientes.length) {
+        return res.status(400).json({ error: 'Esta receta no tiene ingredientes para descontar.' });
+    }
 
     const factor = cantidad / receta.porciones;
     const calculados = ingredientes.map(ing => ({
@@ -224,8 +362,16 @@ router.post('/api/recetas/:id/registrar', (req, res) => {
 
 // Eliminar receta
 router.delete('/api/recetas/:id', (req, res) => {
-    db.prepare('DELETE FROM recetas WHERE id = ?').run(req.params.id);
-    res.json({ ok: true });
+    const receta = db.prepare('SELECT * FROM recetas WHERE id = ?').get(req.params.id);
+    if (!receta) return res.status(404).json({ error: 'Receta no encontrada.' });
+
+    db.transaction(() => {
+        db.prepare('DELETE FROM receta_ingredientes WHERE receta_id = ?').run(receta.id);
+        db.prepare('DELETE FROM recetas WHERE id = ?').run(receta.id);
+        eliminarProductoTerminado(receta.producto_id);
+    })();
+
+    res.json({ ok: true, producto_id: receta.producto_id });
 });
 
 module.exports = router;

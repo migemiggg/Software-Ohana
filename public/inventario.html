@@ -35,7 +35,7 @@
         <div class="topbar">
             <h3>Inventario</h3>
             <div style="display:flex;gap:.5rem">
-                <button class="btn-outline" onclick="openModal('modal-movimiento')">
+                <button class="btn-outline" onclick="abrirMovimiento()">
                     <i data-lucide="arrow-up-down"></i> Movimiento
                 </button>
                 <button class="btn-ohana" onclick="abrirFormProducto()">
@@ -98,8 +98,8 @@
                 <div class="form-group">
                     <label>Unidad *</label>
                     <select id="prod-unidad" class="form-control">
-                        <option>pza</option><option>kg</option><option>lt</option>
-                        <option>caja</option><option>bolsa</option><option>g</option><option>ml</option>
+                        <option>pza</option><option>g</option><option>ml</option>
+                        <option>caja</option><option>bolsa</option><option>kg</option><option>lt</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -156,6 +156,10 @@
                 <label>Motivo</label>
                 <input type="text" id="mov-motivo" class="form-control" placeholder="Ej: compra semanal, uso en produccion...">
             </div>
+            <div style="display:flex;justify-content:flex-end;margin:-.25rem 0 .5rem">
+                <button type="button" class="btn-outline" style="padding:.3rem .6rem;font-size:.8rem" onclick="agregarMovimientoExtra()">+ Agregar otro</button>
+            </div>
+            <div id="movimientos-extra"></div>
             <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
                 <button type="button" class="btn-outline" onclick="closeModal('modal-movimiento')">Cancelar</button>
                 <button type="submit" class="btn-ohana">Registrar</button>
@@ -169,13 +173,39 @@
 <script>
 let productos = [];
 
+function numeroLimpio(valor, maxDecimales = 2) {
+    const n = Number(valor || 0);
+    return n.toLocaleString('es-MX', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDecimales
+    });
+}
+
+function cantidadLimpia(valor, unidad) {
+    const decimales = ['pza', 'caja', 'bolsa'].includes(unidad) ? 0 : 2;
+    return numeroLimpio(valor, decimales);
+}
+
+function cantidadConUnidad(valor, unidad) {
+    return `${cantidadLimpia(valor, unidad)} ${unidad || ''}`.trim();
+}
+
+function precioUnitario(precio) {
+    const n = Number(precio || 0);
+    const decimales = n > 0 && n < 1 ? 4 : 2;
+    return '$' + n.toLocaleString('es-MX', {
+        minimumFractionDigits: decimales,
+        maximumFractionDigits: decimales
+    });
+}
+
 async function cargar() {
     const [prods, cats, alertas] = await Promise.all([
         api.get('/api/productos'), api.get('/api/categorias'), api.get('/api/alertas/stock')
     ]);
     productos = prods;
+    document.getElementById('alertas-bar').style.display = alertas.length ? 'flex' : 'none';
     if (alertas.length) {
-        document.getElementById('alertas-bar').style.display = 'flex';
         document.getElementById('alertas-count').textContent = alertas.length;
         lucide.createIcons();
     }
@@ -183,8 +213,48 @@ async function cargar() {
     document.getElementById('filtro-cat').innerHTML = '<option value="">Todas las categorias</option>' + catOpts;
     document.getElementById('prod-categoria').innerHTML = '<option value="">Sin categoria</option>' + catOpts;
     document.getElementById('mov-producto').innerHTML = prods.map(p =>
-        `<option value="${p.id}">${p.nombre} (${p.stock_actual} ${p.unidad})</option>`).join('');
+        `<option value="${p.id}">${p.nombre} (${cantidadConUnidad(p.stock_actual, p.unidad)})</option>`).join('');
     filtrar();
+}
+
+function opcionesProductos(selected = '') {
+    return productos.map(p =>
+        `<option value="${p.id}" ${String(p.id) === String(selected) ? 'selected' : ''}>${p.nombre} (${cantidadConUnidad(p.stock_actual, p.unidad)})</option>`
+    ).join('');
+}
+
+function abrirMovimiento() {
+    document.getElementById('form-movimiento').reset();
+    document.getElementById('movimientos-extra').innerHTML = '';
+    openModal('modal-movimiento');
+}
+
+function agregarMovimientoExtra() {
+    const div = document.createElement('div');
+    div.className = 'mov-extra';
+    div.style = 'display:grid;grid-template-columns:1.5fr .8fr .8fr 1.2fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
+    div.innerHTML = `
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Producto</label>
+            <select class="form-control mov-extra-producto" required>${opcionesProductos()}</select>
+        </div>
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Tipo</label>
+            <select class="form-control mov-extra-tipo">
+                <option value="entrada">Entrada (+)</option>
+                <option value="salida">Salida (-)</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Cantidad</label>
+            <input type="number" class="form-control mov-extra-cantidad" min="0.01" step="0.01" required>
+        </div>
+        <div class="form-group" style="margin:0">
+            <label style="font-size:.75rem">Motivo</label>
+            <input type="text" class="form-control mov-extra-motivo" placeholder="Motivo...">
+        </div>
+        <button type="button" onclick="this.parentElement.remove()" style="padding:.4rem .5rem;border:1px solid #e5e7eb;background:#fff;border-radius:6px;cursor:pointer;color:#6b7280">&#x2715;</button>`;
+    document.getElementById('movimientos-extra').appendChild(div);
 }
 
 function filtrar() {
@@ -203,9 +273,9 @@ function filtrar() {
             <td><strong>${p.nombre}</strong>${p.descripcion ? `<br><small style="color:#9ca3af">${p.descripcion}</small>` : ''}</td>
             <td>${p.categoria || '&mdash;'}</td>
             <td>${p.unidad}</td>
-            <td>${bajo ? `<span class="badge badge-red">${p.stock_actual}</span>` : p.stock_actual}</td>
-            <td>${p.stock_minimo}</td>
-            <td>${fmt(p.precio_unitario)}</td>
+            <td>${bajo ? `<span class="badge badge-red">${cantidadLimpia(p.stock_actual, p.unidad)}</span>` : cantidadLimpia(p.stock_actual, p.unidad)}</td>
+            <td>${cantidadLimpia(p.stock_minimo, p.unidad)}</td>
+            <td>${precioUnitario(p.precio_unitario)}</td>
             <td style="display:flex;gap:.35rem">
                 <button class="btn-icon" title="Editar" onclick="editarProducto(${p.id})"><i data-lucide="pencil"></i></button>
                 <button class="btn-icon danger" title="Eliminar" onclick="eliminarProducto(${p.id})"><i data-lucide="trash-2"></i></button>
@@ -228,8 +298,8 @@ async function editarProducto(id) {
     document.getElementById('prod-nombre').value    = p.nombre;
     document.getElementById('prod-categoria').value = p.categoria_id || '';
     document.getElementById('prod-unidad').value    = p.unidad;
-    document.getElementById('prod-stock').value     = p.stock_actual;
-    document.getElementById('prod-minimo').value    = p.stock_minimo;
+    document.getElementById('prod-stock').value     = cantidadLimpia(p.stock_actual, p.unidad);
+    document.getElementById('prod-minimo').value    = cantidadLimpia(p.stock_minimo, p.unidad);
     document.getElementById('prod-precio').value    = p.precio_unitario;
     document.getElementById('prod-desc').value      = p.descripcion || '';
     document.getElementById('modal-prod-titulo').textContent = 'Editar Producto';
@@ -254,21 +324,43 @@ async function guardarProducto(e) {
 }
 
 async function eliminarProducto(id) {
-    if (!confirmar('Eliminar este producto?')) return;
-    await api.delete(`/api/productos/${id}`);
-    toast('Producto eliminado');
+    const producto = productos.find(p => p.id === id);
+    const mensaje = producto?.ligado_registro
+        ? 'Este producto esta ligado a Registro de Productos. Al eliminarlo de inventario tambien se eliminara su registro, receta e ingredientes. Continuar?'
+        : 'Eliminar este producto?';
+    if (!confirmar(mensaje)) return;
+    const res = await api.delete(`/api/productos/${id}`);
+    if (!res.ok) return toast(res.error || 'No se pudo eliminar producto', 'error');
+    toast(res.recetas_eliminadas ? 'Producto y registro eliminados' : 'Producto eliminado');
     await cargar();
 }
 
 async function guardarMovimiento(e) {
     e.preventDefault();
-    const res = await api.post('/api/movimientos', {
+    const movimientos = [{
         producto_id: document.getElementById('mov-producto').value,
         tipo:        document.getElementById('mov-tipo').value,
         cantidad:    parseFloat(document.getElementById('mov-cantidad').value),
         motivo:      document.getElementById('mov-motivo').value
+    }];
+    document.querySelectorAll('#movimientos-extra .mov-extra').forEach(row => {
+        movimientos.push({
+            producto_id: row.querySelector('.mov-extra-producto').value,
+            tipo:        row.querySelector('.mov-extra-tipo').value,
+            cantidad:    parseFloat(row.querySelector('.mov-extra-cantidad').value),
+            motivo:      row.querySelector('.mov-extra-motivo').value
+        });
     });
-    if (res.ok) { closeModal('modal-movimiento'); toast(`Stock actualizado: ${res.stock_nuevo} unidades`); await cargar(); }
+
+    const res = await api.post('/api/movimientos', {
+        movimientos
+    });
+    if (res.ok) {
+        closeModal('modal-movimiento');
+        const producto = productos.find(p => String(p.id) === String(movimientos[0].producto_id));
+        toast(movimientos.length > 1 ? `${movimientos.length} movimientos registrados` : `Stock actualizado: ${cantidadConUnidad(res.stock_nuevo, producto?.unidad || '')}`);
+        await cargar();
+    }
     else toast(res.error || 'Error', 'error');
 }
 

@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
     cliente_nombre  TEXT    NOT NULL,
     cliente_contacto TEXT,
     estado          TEXT    NOT NULL DEFAULT 'pendiente',  -- 'pendiente' | 'en_proceso' | 'entregado' | 'cancelado'
+    inventario_descontado INTEGER NOT NULL DEFAULT 0,
     total           REAL    NOT NULL DEFAULT 0,
     notas           TEXT,
     usuario_id      INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
