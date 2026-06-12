@@ -188,6 +188,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (inventario?.nextSibling) nav.insertBefore(item, inventario.nextSibling);
         else nav.appendChild(item);
     }
+    const recetasLink = nav?.querySelector('a[href="/recetas"]');
+    if (recetasLink) {
+        recetasLink.innerHTML = '<i data-lucide="package-check"></i> Registro de productos';
+    }
 
     // Sidebar: marcar enlace activo
     const path = window.location.pathname;

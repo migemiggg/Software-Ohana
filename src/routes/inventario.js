@@ -15,12 +15,22 @@ router.get('/api/categorias', (req, res) => {
 /* ─── PRODUCTOS ─── */
 // Listar todos los productos
 router.get('/api/productos', (req, res) => {
+    const { categoria } = req.query;
+    const params = [];
+    let where = '';
+
+    if (categoria) {
+        where = 'WHERE lower(c.nombre) = lower(?)';
+        params.push(categoria);
+    }
+
     const rows = db.prepare(`
         SELECT p.*, c.nombre AS categoria
         FROM productos p
         LEFT JOIN categorias c ON c.id = p.categoria_id
+        ${where}
         ORDER BY p.nombre
-    `).all();
+    `).all(params);
     res.json(rows);
 });
 

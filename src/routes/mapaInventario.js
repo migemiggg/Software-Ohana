@@ -33,6 +33,7 @@ function getLocationWithInventory(id) {
         LEFT JOIN productos p ON p.id = li.producto_id
         LEFT JOIN categorias c ON c.id = p.categoria_id
         WHERE li.location_id = ?
+          AND lower(COALESCE(c.nombre, '')) = lower('Productos')
         ORDER BY product_name
     `).all(id);
     return location;
@@ -40,8 +41,20 @@ function getLocationWithInventory(id) {
 
 router.get('/api/mapa-inventario/stats', (req, res) => {
     const locations = db.prepare('SELECT COUNT(*) AS total FROM locations').get().total || 0;
-    const products = db.prepare('SELECT COUNT(*) AS total FROM location_inventory').get().total || 0;
-    const units = db.prepare('SELECT COALESCE(SUM(quantity), 0) AS total FROM location_inventory').get().total || 0;
+    const products = db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM location_inventory li
+        JOIN productos p ON p.id = li.producto_id
+        JOIN categorias c ON c.id = p.categoria_id
+        WHERE lower(c.nombre) = lower('Productos')
+    `).get().total || 0;
+    const units = db.prepare(`
+        SELECT COALESCE(SUM(li.quantity), 0) AS total
+        FROM location_inventory li
+        JOIN productos p ON p.id = li.producto_id
+        JOIN categorias c ON c.id = p.categoria_id
+        WHERE lower(c.nombre) = lower('Productos')
+    `).get().total || 0;
     const clients = db.prepare('SELECT COUNT(*) AS total FROM clientes').get().total || 0;
     const productTypes = db.prepare(`
         SELECT COUNT(DISTINCT product_type) AS total
@@ -60,7 +73,9 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
         where += ` AND EXISTS (
             SELECT 1 FROM location_inventory li
             LEFT JOIN productos p ON p.id = li.producto_id
+            LEFT JOIN categorias c ON c.id = p.categoria_id
             WHERE li.location_id = l.id
+              AND lower(COALESCE(c.nombre, '')) = lower('Productos')
               AND lower(COALESCE(p.nombre, li.product_name)) LIKE ?
         )`;
         params.push(`%${q.trim().toLowerCase()}%`);
@@ -93,10 +108,23 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
     const locations = db.prepare(`
         SELECT l.*,
                GROUP_CONCAT(DISTINCT c.nombre) AS clientes,
-               COUNT(li.id) AS product_count,
-               COALESCE(SUM(li.quantity), 0) AS total_quantity
+               (
+                   SELECT COUNT(*)
+                   FROM location_inventory li2
+                   JOIN productos p2 ON p2.id = li2.producto_id
+                   JOIN categorias c2 ON c2.id = p2.categoria_id
+                   WHERE li2.location_id = l.id
+                     AND lower(c2.nombre) = lower('Productos')
+               ) AS product_count,
+               (
+                   SELECT COALESCE(SUM(li3.quantity), 0)
+                   FROM location_inventory li3
+                   JOIN productos p3 ON p3.id = li3.producto_id
+                   JOIN categorias c3 ON c3.id = p3.categoria_id
+                   WHERE li3.location_id = l.id
+                     AND lower(c3.nombre) = lower('Productos')
+               ) AS total_quantity
         FROM locations l
-        LEFT JOIN location_inventory li ON li.location_id = l.id
         LEFT JOIN cliente_locations cl ON cl.location_id = l.id
         LEFT JOIN clientes c ON c.id = cl.cliente_id
         WHERE 1 = 1 ${where}
@@ -114,12 +142,32 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
         LEFT JOIN productos p ON p.id = li.producto_id
         LEFT JOIN categorias c ON c.id = p.categoria_id
         WHERE li.location_id = ?
+          AND lower(COALESCE(c.nombre, '')) = lower('Productos')
         ORDER BY product_name
+    `);
+
+    const ordersStmt = db.prepare(`
+        SELECT p.id AS pedido_id,
+               p.estado,
+               p.fecha_entrega,
+               pr.nombre AS producto,
+               pr.unidad,
+               d.cantidad
+        FROM pedidos p
+        JOIN pedido_detalles d ON d.pedido_id = p.id
+        JOIN productos pr ON pr.id = d.producto_id
+        JOIN categorias cat ON cat.id = pr.categoria_id
+        WHERE p.location_id = ?
+          AND p.estado <> 'cancelado'
+          AND lower(cat.nombre) = lower('Productos')
+        ORDER BY p.fecha_pedido DESC
+        LIMIT 20
     `);
 
     res.json(locations.map(location => ({
         ...location,
-        inventory: inventoryStmt.all(location.id)
+        inventory: inventoryStmt.all(location.id),
+        orders: ordersStmt.all(location.id)
     })));
 });
 

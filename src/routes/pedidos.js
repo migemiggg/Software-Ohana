@@ -55,6 +55,18 @@ router.post('/api/pedidos', (req, res) => {
         return res.status(400).json({ error: 'Faltan datos del pedido.' });
     }
 
+    for (const d of detalles) {
+        const producto = db.prepare(`
+            SELECT p.id, c.nombre AS categoria
+            FROM productos p
+            LEFT JOIN categorias c ON c.id = p.categoria_id
+            WHERE p.id = ?
+        `).get(d.producto_id);
+        if (!producto || producto.categoria !== 'Productos') {
+            return res.status(400).json({ error: 'Los pedidos solo pueden incluir productos terminados.' });
+        }
+    }
+
     const total = detalles.reduce((sum, d) => sum + d.cantidad * d.precio, 0);
 
     const result = db.transaction(() => {
