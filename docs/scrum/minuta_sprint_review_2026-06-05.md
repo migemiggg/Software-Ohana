@@ -5,7 +5,7 @@
 **Proyecto:** Sistema de Gestión de Inventario, Producción y Distribución
 **Fecha:** 05 de junio de 2026
 **Scrum Master:** Adal Gastelum Salazar
-**Equipo de Desarrollo:** Integrantes del proyecto
+**Equipo de Desarrollo:** Paul, Efren, Yahir y Miguel
 **Tipo de reunión:** Sprint Review y Planeación del siguiente Sprint
 
 ---
