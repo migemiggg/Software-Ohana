@@ -40,6 +40,7 @@
             <div style="display:flex;gap:.5rem;align-items:center">
                 <button class="btn-outline" onclick="usarMiUbicacion()"><i data-lucide="crosshair"></i> Mi ubicacion</button>
                 <button class="btn-outline" onclick="exportarCSV()"><i data-lucide="download"></i> CSV</button>
+                <button class="btn-outline" onclick="abrirCliente()"><i data-lucide="user-plus"></i> Cliente</button>
                 <button class="btn-ohana" onclick="abrirUbicacion()"><i data-lucide="plus"></i> Ubicacion</button>
                 <div class="user-badge">
                     <div class="avatar" id="avatar-initials">?</div>
@@ -53,15 +54,15 @@
                 <div class="stat-card"><div class="stat-icon icon-blue"><i data-lucide="map-pin"></i></div><div class="stat-value" id="stat-locations">-</div><div class="stat-label">Ubicaciones</div></div>
                 <div class="stat-card"><div class="stat-icon icon-green"><i data-lucide="boxes"></i></div><div class="stat-value" id="stat-products">-</div><div class="stat-label">Registros de inventario</div></div>
                 <div class="stat-card"><div class="stat-icon icon-yellow"><i data-lucide="package-check"></i></div><div class="stat-value" id="stat-units">-</div><div class="stat-label">Unidades totales</div></div>
-                <div class="stat-card"><div class="stat-icon icon-red"><i data-lucide="tags"></i></div><div class="stat-value" id="stat-categories">-</div><div class="stat-label">Categorias</div></div>
+                <div class="stat-card"><div class="stat-icon icon-red"><i data-lucide="users"></i></div><div class="stat-value" id="stat-clients">-</div><div class="stat-label">Clientes vinculados</div></div>
             </section>
 
             <section class="map-workspace">
                 <aside class="map-panel">
                     <div class="map-search">
                         <input type="text" id="buscar-producto" class="form-control" placeholder="Buscar producto..." oninput="aplicarFiltros()">
-                        <select id="filtro-categoria" class="form-control" onchange="aplicarFiltros()">
-                            <option value="">Todas las categorias</option>
+                        <select id="filtro-cliente" class="form-control" onchange="aplicarFiltros()">
+                            <option value="">Todos los clientes</option>
                         </select>
                     </div>
                     <div class="map-results-head">
@@ -97,6 +98,10 @@
         </div>
         <form onsubmit="guardarUbicacion(event)">
             <input type="hidden" id="loc-id">
+            <div class="form-group">
+                <label>Cliente *</label>
+                <select id="loc-cliente" class="form-control" required></select>
+            </div>
             <div class="form-group"><label>Nombre *</label><input id="loc-name" class="form-control" required></div>
             <div class="form-group"><label>Direccion *</label><input id="loc-address" class="form-control" required></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
@@ -115,6 +120,25 @@
     </div>
 </div>
 
+<div class="modal-overlay" id="modal-cliente">
+    <div class="modal-box" style="max-width:420px">
+        <div class="modal-header">
+            <h4>Nuevo cliente</h4>
+            <button class="modal-close" onclick="closeModal('modal-cliente')">&#x2715;</button>
+        </div>
+        <form onsubmit="guardarCliente(event)">
+            <div class="form-group"><label>Nombre *</label><input id="cli-nombre" class="form-control" required></div>
+            <div class="form-group"><label>Contacto</label><input id="cli-contacto" class="form-control" placeholder="Telefono / WhatsApp"></div>
+            <div class="form-group"><label>Correo</label><input id="cli-correo" type="email" class="form-control"></div>
+            <div class="form-group"><label>Notas</label><textarea id="cli-notas" class="form-control" rows="2"></textarea></div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-cliente')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="modal-overlay" id="modal-inventario">
     <div class="modal-box">
         <div class="modal-header">
@@ -124,9 +148,13 @@
         <form onsubmit="guardarInventario(event)">
             <input type="hidden" id="inv-id">
             <input type="hidden" id="inv-location-id">
-            <div class="form-group"><label>Producto *</label><input id="inv-product" class="form-control" required></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-                <div class="form-group"><label>Categoria</label><input id="inv-category" class="form-control" placeholder="Te,Horchata,Jamaica"></div>
+            <div class="form-group">
+                <label>Producto *</label>
+                <input id="inv-product-search" class="form-control" list="productos-lista" placeholder="Buscar por nombre..." oninput="sincronizarProductoSeleccionado()" required>
+                <datalist id="productos-lista"></datalist>
+                <input type="hidden" id="inv-producto-id">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr;gap:.75rem">
                 <div class="form-group"><label>Cantidad *</label><input id="inv-quantity" type="number" min="0" step="0.01" class="form-control" required></div>
             </div>
             <div class="form-group"><label>URL de imagen</label><input id="inv-image" class="form-control" placeholder="https://..."></div>

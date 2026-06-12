@@ -383,6 +383,7 @@ tr:hover td{background:rgba(255,255,255,.12)}
   padding:.35rem .45rem;border-radius:8px;background:rgba(255,255,255,.42);font-size:.75rem;color:var(--txt-2)
 }
 .location-product span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.location-product span small{display:block;color:var(--txt-3);font-size:.68rem;margin-top:.05rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .location-product strong{color:var(--txt);font-size:.76rem}
 .product-empty{font-size:.75rem;color:var(--txt-3);padding:.2rem 0}
 .map-shell{min-height:560px}

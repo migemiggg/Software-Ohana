@@ -34,7 +34,7 @@
     <div class="main-content">
         <div class="topbar">
             <h3>Pedidos</h3>
-            <button class="btn-ohana" onclick="openModal('modal-pedido')">
+            <button class="btn-ohana" onclick="abrirPedido()">
                 <i data-lucide="plus"></i> Nuevo pedido
             </button>
         </div>
@@ -73,11 +73,17 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
                 <div class="form-group">
                     <label>Cliente *</label>
-                    <input type="text" id="ped-cliente" class="form-control" required>
+                    <select id="ped-cliente-id" class="form-control" onchange="cargarUbicacionesCliente()" required></select>
                 </div>
                 <div class="form-group">
                     <label>Contacto</label>
                     <input type="text" id="ped-contacto" class="form-control" placeholder="Tel / WhatsApp">
+                </div>
+                <div class="form-group">
+                    <label>Ubicacion</label>
+                    <select id="ped-location-id" class="form-control">
+                        <option value="">Sin ubicacion asignada</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Fecha de entrega</label>
@@ -120,13 +126,19 @@
 <div id="toast"></div>
 <script src="/js/app.js"></script>
 <script>
-let todosPedidos = [], productosDisp = [], filtroEstado = '';
+let todosPedidos = [], productosDisp = [], clientesDisp = [], filtroEstado = '';
 
 async function cargar() {
-    [todosPedidos, productosDisp] = await Promise.all([
-        api.get('/api/pedidos'), api.get('/api/productos')
+    [todosPedidos, productosDisp, clientesDisp] = await Promise.all([
+        api.get('/api/pedidos'), api.get('/api/productos'), api.get('/api/clientes')
     ]);
+    renderClientes();
     renderTabla();
+}
+
+function renderClientes() {
+    const opts = clientesDisp.map(c => `<option value="${c.id}" data-contacto="${c.contacto || ''}">${c.nombre}</option>`).join('');
+    document.getElementById('ped-cliente-id').innerHTML = '<option value="">Seleccionar cliente...</option>' + opts;
 }
 
 function setFiltro(btn, estado) {
@@ -142,8 +154,8 @@ function renderTabla() {
     tbody.innerHTML = lista.length ? lista.map(p => `
         <tr>
             <td><strong>#${p.id}</strong></td>
-            <td>${p.cliente_nombre}</td>
-            <td style="color:#6b7280;font-size:.8rem">${p.cliente_contacto || '&mdash;'}</td>
+            <td>${p.cliente_normalizado || p.cliente_nombre}</td>
+            <td style="color:#6b7280;font-size:.8rem">${p.cliente_contacto_normalizado || p.cliente_contacto || '&mdash;'}</td>
             <td>${estadoBadge(p.estado)}</td>
             <td><strong>${fmt(p.total)}</strong></td>
             <td>${fmtFecha(p.fecha_pedido)}</td>
@@ -185,6 +197,30 @@ function agregarLinea() {
     calcularTotal();
 }
 
+function abrirPedido() {
+    document.getElementById('form-pedido').reset();
+    document.getElementById('lineas-pedido').innerHTML = '';
+    document.getElementById('ped-location-id').innerHTML = '<option value="">Sin ubicacion asignada</option>';
+    document.getElementById('total-pedido').textContent = fmt(0);
+    openModal('modal-pedido');
+}
+
+async function cargarUbicacionesCliente() {
+    const select = document.getElementById('ped-cliente-id');
+    const clienteId = select.value;
+    document.getElementById('ped-contacto').value = select.options[select.selectedIndex]?.dataset.contacto || '';
+
+    const locationSelect = document.getElementById('ped-location-id');
+    if (!clienteId) {
+        locationSelect.innerHTML = '<option value="">Sin ubicacion asignada</option>';
+        return;
+    }
+
+    const ubicaciones = await api.get(`/api/clientes/${clienteId}/locations`);
+    locationSelect.innerHTML = '<option value="">Sin ubicacion asignada</option>' +
+        ubicaciones.map(u => `<option value="${u.id}">${u.name} - ${u.address}</option>`).join('');
+}
+
 function actualizarPrecio(sel) {
     sel.closest('.linea-pedido').querySelector('.lin-precio').value = sel.options[sel.selectedIndex].dataset.precio || 0;
     calcularTotal();
@@ -206,8 +242,12 @@ async function guardarPedido(e) {
         precio:      parseFloat(l.querySelector('.lin-precio').value)
     }));
     if (!lineas.length) { toast('Agrega al menos un producto', 'warn'); return; }
+    const clienteSelect = document.getElementById('ped-cliente-id');
+    const clienteNombre = clienteSelect.options[clienteSelect.selectedIndex]?.textContent || '';
     const res = await api.post('/api/pedidos', {
-        cliente_nombre:   document.getElementById('ped-cliente').value,
+        cliente_id:       clienteSelect.value,
+        location_id:      document.getElementById('ped-location-id').value || null,
+        cliente_nombre:   clienteNombre,
         cliente_contacto: document.getElementById('ped-contacto').value,
         fecha_entrega:    document.getElementById('ped-entrega').value || null,
         notas:            document.getElementById('ped-notas').value,
@@ -232,8 +272,9 @@ async function verDetalle(id) {
     const p = await api.get(`/api/pedidos/${id}`);
     document.getElementById('detalle-contenido').innerHTML = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem;font-size:.875rem">
-            <div><strong>Cliente:</strong> ${p.cliente_nombre}</div>
-            <div><strong>Contacto:</strong> ${p.cliente_contacto||'&mdash;'}</div>
+            <div><strong>Cliente:</strong> ${p.cliente_normalizado || p.cliente_nombre}</div>
+            <div><strong>Contacto:</strong> ${p.cliente_contacto_normalizado || p.cliente_contacto || '&mdash;'}</div>
+            <div style="grid-column:1/-1"><strong>Ubicacion:</strong> ${p.ubicacion_nombre ? `${p.ubicacion_nombre} - ${p.ubicacion_direccion || ''}` : '&mdash;'}</div>
             <div><strong>Estado:</strong> ${estadoBadge(p.estado)}</div>
             <div><strong>Pedido:</strong> ${fmtFecha(p.fecha_pedido)}</div>
             <div><strong>Entrega:</strong> ${fmtFecha(p.fecha_entrega)}</div>
