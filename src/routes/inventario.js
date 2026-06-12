@@ -321,13 +321,20 @@ router.delete('/api/movimientos/:id', (req, res) => {
         const actual = db.prepare('SELECT * FROM movimientos_inventario WHERE id = ?').get(req.params.id);
         if (!actual) return res.status(404).json({ ok: false, error: 'Movimiento no encontrado.' });
 
+        let stockNuevo = null;
         db.transaction(() => {
             // Borrar un movimiento tambien regresa el stock a como estaba antes de ese registro.
-            aplicarDeltaStock(actual.producto_id, -deltaMovimiento(actual.tipo, actual.cantidad));
+            stockNuevo = aplicarDeltaStock(actual.producto_id, -deltaMovimiento(actual.tipo, actual.cantidad));
             db.prepare('DELETE FROM movimientos_inventario WHERE id = ?').run(req.params.id);
         })();
 
-        res.json({ ok: true });
+        res.json({
+            ok: true,
+            producto_id: actual.producto_id,
+            tipo: actual.tipo,
+            cantidad: actual.cantidad,
+            stock_nuevo: stockNuevo
+        });
     } catch (error) {
         handleError(res, error);
     }

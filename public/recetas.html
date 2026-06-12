@@ -515,7 +515,8 @@ async function eliminarMovimientoCRUD(id) {
     if (!confirmar('Eliminar este movimiento ajustara el stock. Continuar?')) return;
     const res = await api.delete(`/api/movimientos/${id}`);
     if (!res.ok) return toast(res.error || 'No se pudo eliminar movimiento', 'error');
-    toast('Movimiento eliminado');
+    const producto = productosMovimiento.find(p => String(p.id) === String(res.producto_id));
+    toast(`Movimiento eliminado. Stock actual: ${stockParaVista(res.stock_nuevo, producto?.unidad || '')}`);
     await cargar();
     await cargarMovimientosCRUD();
     if (recetaSelId) await seleccionarReceta(recetaSelId);

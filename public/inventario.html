@@ -387,7 +387,8 @@ async function eliminarMovimientoInventario(id) {
     if (!confirmar('Eliminar este movimiento ajustara el stock del producto. Continuar?')) return;
     const res = await api.delete(`/api/movimientos/${id}`);
     if (!res.ok) return toast(res.error || 'No se pudo eliminar movimiento', 'error');
-    toast('Movimiento eliminado y stock ajustado');
+    const producto = productos.find(p => String(p.id) === String(res.producto_id));
+    toast(`Movimiento eliminado. Stock actual: ${cantidadConUnidad(res.stock_nuevo, producto?.unidad || '')}`);
     await cargar();
     await cargarHistorialMovimientos();
 }
