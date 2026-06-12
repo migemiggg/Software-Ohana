@@ -1,0 +1,188 @@
+GUIA RAPIDA DE COMENTARIOS DE LOGICA
+Proyecto: OhanApp
+
+Este archivo sirve como indice para encontrar rapido las notas dentro del codigo.
+La idea es que, si el profesor pregunta "donde esta la logica de X?", puedas buscar
+la frase indicada en VS Code con Ctrl + F o Ctrl + Shift + F.
+
+1. RECETAS / REGISTRO DE PRODUCTOS
+
+Archivo:
+src/routes/recetas.js
+
+Tema: Validacion de ingredientes antes de guardar receta
+Busca:
+"Aqui se limpian y validan los ingredientes antes de guardar la receta"
+
+Para explicar:
+Aqui se revisa que la receta tenga ingredientes validos, cantidades mayores a cero
+y que no se usen productos terminados como ingredientes.
+
+Tema: Costo unitario del producto terminado
+Busca:
+"Este calculo arma el costo del producto terminado"
+
+Para explicar:
+Aqui se multiplica el precio de cada insumo por su cantidad y se divide entre la
+produccion base para sacar el costo unitario del producto final.
+
+Tema: Liga entre Registro de productos e Inventario
+Busca:
+"Esta funcion es el puente entre Registro de productos e Inventario"
+
+Para explicar:
+Aqui se crea o actualiza automaticamente el producto terminado en inventario cuando
+se crea o edita una receta.
+
+Tema: Agregar receta
+Busca:
+"Logica principal para agregar receta"
+
+Para explicar:
+Aqui primero se asegura que exista el producto terminado y despues se guardan los
+ingredientes de la receta dentro de la misma transaccion.
+
+Tema: Conversion de receta base a cantidad producida
+Busca:
+"El factor convierte la receta base a la cantidad real que se va a producir"
+
+Para explicar:
+Aqui se calcula el multiplicador para saber cuanto ingrediente se necesita segun
+la cantidad que se va a producir.
+
+Tema: Registrar produccion
+Busca:
+"Produccion real: se descuentan insumos y se agrega el producto terminado"
+
+Para explicar:
+Aqui se descuentan los insumos del inventario, se suma el producto terminado y se
+crean movimientos para dejar evidencia del cambio.
+
+
+2. PEDIDOS
+
+Archivo:
+src/routes/pedidos.js
+
+Tema: Pedido ligado a ubicacion del mapa
+Busca:
+"Aqui se amarra Pedido con Mapa inventario"
+
+Para explicar:
+Aqui se decide que ubicacion guardar en el pedido. Si el usuario no selecciona
+una ubicacion, el sistema usa la ubicacion principal del cliente.
+
+Tema: Entregar pedido y descontar inventario
+Busca:
+"Esta es la entrega real del pedido"
+
+Para explicar:
+Aqui se valida que haya stock suficiente y luego se descuentan los productos
+terminados cuando el pedido pasa a entregado.
+
+Tema: Reabrir o cancelar pedido entregado
+Busca:
+"Si se reabre o cancela un pedido ya entregado"
+
+Para explicar:
+Aqui se regresa el stock cuando un pedido entregado se corrige, se cancela o se
+reabre.
+
+
+3. MOVIMIENTOS DE INVENTARIO
+
+Archivo:
+src/routes/inventario.js
+
+Tema: Registrar movimientos y actualizar stock
+Busca:
+"Aqui se registra la evidencia del movimiento"
+
+Para explicar:
+Aqui se guarda el movimiento en el historial y despues se actualiza el stock del
+producto. Sirve para demostrar que el historial e inventario se mueven juntos.
+
+Tema: Editar movimiento
+Busca:
+"Primero se cancela el efecto anterior"
+
+Para explicar:
+Aqui se revierte el efecto del movimiento viejo y despues se aplica el nuevo.
+Eso evita que el stock quede mal cuando se edita el historial.
+
+Tema: Borrar movimiento
+Busca:
+"Borrar un movimiento tambien regresa el stock"
+
+Para explicar:
+Aqui se elimina el movimiento, pero antes se revierte su impacto en inventario.
+
+
+4. CLIENTES
+
+Archivo:
+src/routes/mapaInventario.js
+
+Tema: Editar cliente
+Busca:
+"Esta actualizacion mantiene al cliente como ficha principal"
+
+Para explicar:
+Aqui se actualizan los datos del cliente sin duplicarlo, manteniendo la liga con
+pedidos y ubicaciones.
+
+Tema: Borrar cliente
+Busca:
+"Al borrar cliente no borramos ubicaciones ni pedidos antiguos"
+
+Para explicar:
+Aqui se quita la liga del cliente, pero se conserva el historial de pedidos y el
+inventario de ubicaciones para no perder informacion.
+
+Archivo:
+public/clientes.html
+
+Tema: CRUD de clientes en pantalla
+Busca:
+"Esta es la parte del CRUD"
+
+Para explicar:
+Aqui el formulario decide si crea un cliente nuevo o actualiza uno existente,
+dependiendo de si ya tiene id.
+
+
+5. MAPA INVENTARIO / DIRECCION
+
+Archivo:
+public/js/mapa-inventario.js
+
+Tema: Direccion completa a coordenadas
+Busca:
+"Esta funcion evita que el empleado capture coordenadas a mano"
+
+Para explicar:
+Aqui el sistema toma la direccion escrita, la busca en OpenStreetMap y guarda
+latitud/longitud ocultas para ubicar el punto en el mapa.
+
+
+6. MOVIMIENTOS EN REGISTRO DE PRODUCTOS
+
+Archivo:
+public/recetas.html
+
+Tema: Modal de CRUD de movimientos
+Busca:
+"Modal: CRUD de movimientos"
+
+Para explicar:
+Aqui empieza el modal que permite ver, crear, editar y eliminar movimientos desde
+Registro de productos.
+
+Tema: Guardar movimiento desde Registro de productos
+Busca:
+"En este CRUD el mismo formulario sirve para crear o editar"
+
+Para explicar:
+Aqui el formulario decide si crea o edita un movimiento. El backend se encarga
+de ajustar el stock para mantener el historial correcto.
+

@@ -423,6 +423,39 @@ router.post('/api/clientes', requireRoles('admin'), (req, res) => {
     res.json({ ok: true, id: info.lastInsertRowid });
 });
 
+router.put('/api/clientes/:id', requireRoles('admin'), (req, res) => {
+    const { nombre, contacto, correo, notas } = req.body;
+    if (!nombre) return res.status(400).json({ ok: false, error: 'El nombre del cliente es requerido.' });
+
+    const cliente = db.prepare('SELECT id FROM clientes WHERE id = ?').get(req.params.id);
+    if (!cliente) return res.status(404).json({ ok: false, error: 'Cliente no encontrado.' });
+
+    // Esta actualizacion mantiene al cliente como ficha principal.
+    // Pedidos y ubicaciones siguen ligados por cliente_id, por eso no se duplican datos.
+    db.prepare(`
+        UPDATE clientes
+        SET nombre = ?, contacto = ?, correo = ?, notas = ?, actualizado_en = datetime('now')
+        WHERE id = ?
+    `).run(nombre.trim(), contacto || null, correo || null, notas || null, req.params.id);
+
+    res.json({ ok: true });
+});
+
+router.delete('/api/clientes/:id', requireRoles('admin'), (req, res) => {
+    const cliente = db.prepare('SELECT id FROM clientes WHERE id = ?').get(req.params.id);
+    if (!cliente) return res.status(404).json({ ok: false, error: 'Cliente no encontrado.' });
+
+    db.transaction(() => {
+        // Al borrar cliente no borramos ubicaciones ni pedidos antiguos.
+        // Solo quitamos la liga para conservar inventario y el historial de ventas.
+        db.prepare('UPDATE pedidos SET cliente_id = NULL WHERE cliente_id = ?').run(req.params.id);
+        db.prepare('DELETE FROM cliente_locations WHERE cliente_id = ?').run(req.params.id);
+        db.prepare('DELETE FROM clientes WHERE id = ?').run(req.params.id);
+    })();
+
+    res.json({ ok: true });
+});
+
 router.get('/api/clientes/:id/locations', (req, res) => {
     const rows = db.prepare(`
         SELECT l.*

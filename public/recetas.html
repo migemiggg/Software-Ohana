@@ -34,9 +34,14 @@
     <div class="main-content">
         <div class="topbar">
             <h3>Registro de Productos</h3>
-            <button class="btn-ohana" onclick="abrirModalReceta()">
-                <i data-lucide="plus"></i> Nueva receta base
-            </button>
+            <div style="display:flex;gap:.5rem">
+                <button class="btn-outline" onclick="abrirMovimientos()">
+                    <i data-lucide="history"></i> Movimientos
+                </button>
+                <button class="btn-ohana" onclick="abrirModalReceta()">
+                    <i data-lucide="plus"></i> Nueva receta base
+                </button>
+            </div>
         </div>
 
         <div class="page-body">
@@ -138,10 +143,63 @@
     </div>
 </div>
 
+<!-- Modal: CRUD de movimientos -->
+<div class="modal-overlay" id="modal-movimientos">
+    <div class="modal-box" style="max-width:900px">
+        <div class="modal-header">
+            <h4>Movimientos</h4>
+            <button class="modal-close" onclick="closeModal('modal-movimientos')">&#x2715;</button>
+        </div>
+
+        <form id="form-movimiento-receta" onsubmit="guardarMovimientoCRUD(event)" style="margin-bottom:.875rem">
+            <input type="hidden" id="mov-crud-id">
+            <div style="display:grid;grid-template-columns:1.6fr .8fr .8fr 1.4fr auto;gap:.5rem;align-items:end">
+                <div class="form-group" style="margin:0">
+                    <label>Producto *</label>
+                    <select id="mov-crud-producto" class="form-control" required></select>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Tipo *</label>
+                    <select id="mov-crud-tipo" class="form-control">
+                        <option value="entrada">Entrada (+)</option>
+                        <option value="salida">Salida (-)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Cantidad *</label>
+                    <input type="number" id="mov-crud-cantidad" class="form-control" min="0.01" step="0.01" required>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Motivo</label>
+                    <input id="mov-crud-motivo" class="form-control" placeholder="Motivo del movimiento">
+                </div>
+                <div style="display:flex;gap:.35rem">
+                    <button type="button" class="btn-outline" onclick="limpiarMovimientoCRUD()">Nuevo</button>
+                    <button type="submit" class="btn-ohana">Guardar</button>
+                </div>
+            </div>
+        </form>
+
+        <div style="display:flex;gap:.5rem;margin-bottom:.6rem">
+            <input id="buscar-movimientos" class="form-control" placeholder="Buscar producto o motivo..." oninput="cargarMovimientosCRUD()">
+            <button class="btn-outline" onclick="cargarMovimientosCRUD()"><i data-lucide="refresh-cw"></i> Actualizar</button>
+        </div>
+
+        <div class="table-card">
+            <table>
+                <thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Motivo</th><th>Usuario</th><th>Acciones</th></tr></thead>
+                <tbody id="tbl-movimientos-crud">
+                    <tr><td colspan="7" style="text-align:center;padding:1.25rem;color:#9ca3af">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div id="toast"></div>
 <script src="/js/app.js"></script>
 <script>
-let recetas = [], productos = [], recetaSelId = null, recetaEnEdicion = null;
+let recetas = [], productos = [], productosMovimiento = [], movimientosCRUD = [], recetaSelId = null, recetaEnEdicion = null, movimientoEditId = null;
 
 function productoPorId(id) {
     return productos.find(p => String(p.id) === String(id));
@@ -195,6 +253,7 @@ async function cargar() {
     const allProductos = await api.get('/api/productos');
     recetas = await api.get('/api/recetas');
     productos = allProductos.filter(p => p.categoria !== 'Productos');
+    productosMovimiento = allProductos;
     renderLista();
 }
 
@@ -371,6 +430,95 @@ async function eliminarRecetaSel() {
     document.getElementById('panel-vacio').style.display    = 'block';
     toast('Receta eliminada');
     await cargar();
+}
+
+function opcionesMovimientoProducto(selected = '') {
+    return productosMovimiento.map(p =>
+        `<option value="${p.id}" ${String(p.id) === String(selected) ? 'selected' : ''}>${p.nombre} (${p.unidad})</option>`
+    ).join('');
+}
+
+function limpiarMovimientoCRUD() {
+    movimientoEditId = null;
+    document.getElementById('form-movimiento-receta').reset();
+    document.getElementById('mov-crud-id').value = '';
+    document.getElementById('mov-crud-producto').innerHTML = opcionesMovimientoProducto();
+}
+
+async function abrirMovimientos() {
+    if (!productosMovimiento.length) await cargar();
+    limpiarMovimientoCRUD();
+    openModal('modal-movimientos');
+    await cargarMovimientosCRUD();
+}
+
+async function cargarMovimientosCRUD() {
+    const q = document.getElementById('buscar-movimientos')?.value || '';
+    const url = `/api/movimientos?limit=250${q ? `&q=${encodeURIComponent(q)}` : ''}`;
+    movimientosCRUD = await api.get(url);
+    renderMovimientosCRUD();
+}
+
+function renderMovimientosCRUD() {
+    const tbody = document.getElementById('tbl-movimientos-crud');
+    tbody.innerHTML = movimientosCRUD.length ? movimientosCRUD.map(m => `
+        <tr>
+            <td>${fmtFecha(m.fecha)}</td>
+            <td><strong>${m.producto_nombre}</strong><br><small style="color:#9ca3af">${m.categoria || '&mdash;'}</small></td>
+            <td><span class="badge ${m.tipo === 'entrada' ? 'badge-green' : 'badge-red'}">${m.tipo}</span></td>
+            <td>${stockParaVista(m.cantidad, m.unidad)}</td>
+            <td>${m.motivo || '&mdash;'}</td>
+            <td>${m.usuario || '&mdash;'}</td>
+            <td style="display:flex;gap:.35rem">
+                <button class="btn-icon" title="Editar" onclick="editarMovimientoCRUD(${m.id})"><i data-lucide="pencil"></i></button>
+                <button class="btn-icon danger" title="Eliminar" onclick="eliminarMovimientoCRUD(${m.id})"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>
+    `).join('') : '<tr><td colspan="7" style="text-align:center;padding:1.25rem;color:#9ca3af">Sin movimientos</td></tr>';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function editarMovimientoCRUD(id) {
+    const mov = movimientosCRUD.find(m => m.id === id);
+    if (!mov) return;
+    movimientoEditId = id;
+    document.getElementById('mov-crud-id').value = id;
+    document.getElementById('mov-crud-producto').innerHTML = opcionesMovimientoProducto(mov.producto_id);
+    document.getElementById('mov-crud-tipo').value = mov.tipo;
+    document.getElementById('mov-crud-cantidad').value = mov.cantidad;
+    document.getElementById('mov-crud-motivo').value = mov.motivo || '';
+}
+
+async function guardarMovimientoCRUD(event) {
+    event.preventDefault();
+    const id = document.getElementById('mov-crud-id').value;
+    const payload = {
+        producto_id: document.getElementById('mov-crud-producto').value,
+        tipo: document.getElementById('mov-crud-tipo').value,
+        cantidad: parseFloat(document.getElementById('mov-crud-cantidad').value),
+        motivo: document.getElementById('mov-crud-motivo').value
+    };
+
+    // En este CRUD el mismo formulario sirve para crear o editar.
+    // El backend ajusta el stock para que el historial y el inventario coincidan.
+    const res = id ? await api.put(`/api/movimientos/${id}`, payload) : await api.post('/api/movimientos', payload);
+    if (!res.ok) return toast(res.error || 'No se pudo guardar movimiento', 'error');
+
+    toast(id ? 'Movimiento editado y stock ajustado' : 'Movimiento agregado');
+    limpiarMovimientoCRUD();
+    await cargar();
+    await cargarMovimientosCRUD();
+    if (recetaSelId) await seleccionarReceta(recetaSelId);
+}
+
+async function eliminarMovimientoCRUD(id) {
+    if (!confirmar('Eliminar este movimiento ajustara el stock. Continuar?')) return;
+    const res = await api.delete(`/api/movimientos/${id}`);
+    if (!res.ok) return toast(res.error || 'No se pudo eliminar movimiento', 'error');
+    toast('Movimiento eliminado');
+    await cargar();
+    await cargarMovimientosCRUD();
+    if (recetaSelId) await seleccionarReceta(recetaSelId);
 }
 
 cargar();

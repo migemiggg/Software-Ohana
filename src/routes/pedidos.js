@@ -68,6 +68,8 @@ function assertProductosTerminados(detalles) {
 }
 
 function resolvePedidoLocationId(clienteId, requestedLocationId) {
+    // Aqui se amarra Pedido con Mapa inventario.
+    // Si el usuario no escoge ubicacion, se usa la ubicacion principal del cliente.
     if (!clienteId) return null;
 
     const selectedId = Number(requestedLocationId);
@@ -154,6 +156,8 @@ function registrarMovimiento(productoId, tipo, cantidad, motivo, usuarioId) {
 }
 
 function descontarPedidoEntregado(pedido, usuarioId) {
+    // Esta es la entrega real del pedido: valida stock y descuenta productos terminados.
+    // Por eso se llama solo cuando el pedido cambia a estado entregado.
     const detalles = getDetallesPedidoAgrupados(pedido.id);
     if (!detalles.length) {
         const err = new Error('El pedido no tiene productos para entregar.');
@@ -191,6 +195,8 @@ function descontarPedidoEntregado(pedido, usuarioId) {
 }
 
 function revertirEntregaPedido(pedido, nuevoEstado, usuarioId) {
+    // Si se reabre o cancela un pedido ya entregado, aqui se regresa el stock.
+    // Sirve para corregir errores sin perder el historial del movimiento.
     const detalles = getDetallesPedidoAgrupados(pedido.id);
     for (const detalle of detalles) {
         registrarMovimiento(

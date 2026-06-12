@@ -29,6 +29,38 @@ function handleError(res, error) {
     res.status(error.status || 500).json({ ok: false, error: error.message || 'Error inesperado.' });
 }
 
+function deltaMovimiento(tipo, cantidad) {
+    return tipo === 'entrada' ? Number(cantidad) : -Number(cantidad);
+}
+
+function validarStockDisponible(productoId, delta) {
+    const producto = db.prepare('SELECT id, nombre, unidad, stock_actual FROM productos WHERE id = ?').get(productoId);
+    if (!producto) {
+        const err = new Error('Producto no encontrado.');
+        err.status = 404;
+        throw err;
+    }
+
+    const stockNuevo = Number(producto.stock_actual) + Number(delta);
+    if (stockNuevo < 0) {
+        const err = new Error(`Stock insuficiente para ${producto.nombre}. Disponible: ${producto.stock_actual} ${producto.unidad}.`);
+        err.status = 400;
+        throw err;
+    }
+
+    return { producto, stockNuevo };
+}
+
+function aplicarDeltaStock(productoId, delta) {
+    const { stockNuevo } = validarStockDisponible(productoId, delta);
+    db.prepare(`
+        UPDATE productos
+        SET stock_actual = ?, actualizado_en = datetime('now')
+        WHERE id = ?
+    `).run(Number(stockNuevo.toFixed(6)), productoId);
+    return Number(stockNuevo.toFixed(6));
+}
+
 function normalizarProductoInventario(data) {
     const categoria = data.categoria_id
         ? db.prepare('SELECT nombre FROM categorias WHERE id = ?').get(data.categoria_id)
@@ -165,15 +197,10 @@ router.post('/api/movimientos', (req, res) => {
             return res.status(400).json({ ok: false, error: 'Agrega al menos un movimiento.' });
         }
 
-        const getProducto = db.prepare('SELECT * FROM productos WHERE id = ?');
         const stockPorProducto = new Map();
         for (const movimiento of movimientos) {
-            const producto = getProducto.get(movimiento.producto_id);
-            if (!producto) {
-                const err = new Error('Producto no encontrado.');
-                err.status = 404;
-                throw err;
-            }
+            const producto = db.prepare('SELECT * FROM productos WHERE id = ?').get(movimiento.producto_id);
+            if (!producto) throw Object.assign(new Error('Producto no encontrado.'), { status: 404 });
 
             const stockActual = stockPorProducto.has(movimiento.producto_id)
                 ? stockPorProducto.get(movimiento.producto_id)
@@ -201,6 +228,8 @@ router.post('/api/movimientos', (req, res) => {
                 UPDATE productos SET stock_actual = ?, actualizado_en = datetime('now') WHERE id = ?
             `);
 
+            // Aqui se registra la evidencia del movimiento y hasta despues se deja el stock final.
+            // Asi el profesor puede ver que el historial y el inventario se actualizan juntos.
             for (const movimiento of movimientos) {
                 insertMovimiento.run(
                     movimiento.producto_id,
@@ -225,6 +254,80 @@ router.post('/api/movimientos', (req, res) => {
                 stock_nuevo: m.stock_nuevo
             }))
         });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Historial general de movimientos
+router.get('/api/movimientos', (req, res) => {
+    const { producto_id = '', q = '', limit = 150 } = req.query;
+    const params = [];
+    let where = 'WHERE 1 = 1';
+
+    if (producto_id) {
+        where += ' AND m.producto_id = ?';
+        params.push(producto_id);
+    }
+    if (q.trim()) {
+        where += ' AND (lower(p.nombre) LIKE ? OR lower(COALESCE(m.motivo, "")) LIKE ?)';
+        params.push(`%${q.trim().toLowerCase()}%`, `%${q.trim().toLowerCase()}%`);
+    }
+
+    const rows = db.prepare(`
+        SELECT m.*, p.nombre AS producto_nombre, p.unidad, c.nombre AS categoria, u.nombre AS usuario
+        FROM movimientos_inventario m
+        JOIN productos p ON p.id = m.producto_id
+        LEFT JOIN categorias c ON c.id = p.categoria_id
+        LEFT JOIN usuarios u ON u.id = m.usuario_id
+        ${where}
+        ORDER BY m.fecha DESC, m.id DESC
+        LIMIT ?
+    `).all([...params, Math.min(Number(limit) || 150, 500)]);
+    res.json(rows);
+});
+
+// Editar movimiento y recalcular el stock que provocaba ese movimiento
+router.put('/api/movimientos/:id', (req, res) => {
+    try {
+        const nuevo = parseMovimiento(req.body);
+        const actual = db.prepare('SELECT * FROM movimientos_inventario WHERE id = ?').get(req.params.id);
+        if (!actual) return res.status(404).json({ ok: false, error: 'Movimiento no encontrado.' });
+
+        db.transaction(() => {
+            // Primero se cancela el efecto anterior. Despues se aplica el nuevo dato editado.
+            // Esta es la parte clave para que editar historial no deje el stock mentiroso.
+            aplicarDeltaStock(actual.producto_id, -deltaMovimiento(actual.tipo, actual.cantidad));
+            const stockNuevo = aplicarDeltaStock(nuevo.producto_id, deltaMovimiento(nuevo.tipo, nuevo.cantidad));
+
+            db.prepare(`
+                UPDATE movimientos_inventario
+                SET producto_id = ?, tipo = ?, cantidad = ?, motivo = ?
+                WHERE id = ?
+            `).run(nuevo.producto_id, nuevo.tipo, nuevo.cantidad, nuevo.motivo, req.params.id);
+
+            nuevo.stock_nuevo = stockNuevo;
+        })();
+
+        res.json({ ok: true, stock_nuevo: nuevo.stock_nuevo });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Eliminar movimiento revirtiendo su efecto del inventario
+router.delete('/api/movimientos/:id', (req, res) => {
+    try {
+        const actual = db.prepare('SELECT * FROM movimientos_inventario WHERE id = ?').get(req.params.id);
+        if (!actual) return res.status(404).json({ ok: false, error: 'Movimiento no encontrado.' });
+
+        db.transaction(() => {
+            // Borrar un movimiento tambien regresa el stock a como estaba antes de ese registro.
+            aplicarDeltaStock(actual.producto_id, -deltaMovimiento(actual.tipo, actual.cantidad));
+            db.prepare('DELETE FROM movimientos_inventario WHERE id = ?').run(req.params.id);
+        })();
+
+        res.json({ ok: true });
     } catch (error) {
         handleError(res, error);
     }

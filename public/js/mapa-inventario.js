@@ -46,6 +46,8 @@ function marcarDireccionPendiente() {
 }
 
 async function geocodificarDireccion({ enfocar = true } = {}) {
+    // Esta funcion evita que el empleado capture coordenadas a mano.
+    // Toma la direccion escrita, la busca en OpenStreetMap y guarda latitud/longitud ocultas.
     const addressInput = document.getElementById('loc-address');
     const rawAddress = addressInput.value.trim();
     if (!rawAddress) {

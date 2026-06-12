@@ -168,10 +168,29 @@
     </div>
 </div>
 
+<!-- Modal: Historial de movimientos -->
+<div class="modal-overlay" id="modal-historial-mov">
+    <div class="modal-box" style="max-width:760px">
+        <div class="modal-header">
+            <h4 id="historial-mov-titulo">Movimientos</h4>
+            <button class="modal-close" onclick="closeModal('modal-historial-mov')">&#x2715;</button>
+        </div>
+        <div class="table-card">
+            <table>
+                <thead><tr><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Motivo</th><th>Usuario</th><th>Acciones</th></tr></thead>
+                <tbody id="tbl-historial-mov">
+                    <tr><td colspan="6" style="text-align:center;padding:1.25rem;color:#9ca3af">Selecciona un producto</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div id="toast"></div>
 <script src="/js/app.js"></script>
 <script>
 let productos = [];
+let productoHistorialId = null;
 
 function numeroLimpio(valor, maxDecimales = 2) {
     const n = Number(valor || 0);
@@ -277,6 +296,7 @@ function filtrar() {
             <td>${cantidadLimpia(p.stock_minimo, p.unidad)}</td>
             <td>${precioUnitario(p.precio_unitario)}</td>
             <td style="display:flex;gap:.35rem">
+                <button class="btn-icon" title="Movimientos" onclick="abrirHistorialMovimientos(${p.id})"><i data-lucide="history"></i></button>
                 <button class="btn-icon" title="Editar" onclick="editarProducto(${p.id})"><i data-lucide="pencil"></i></button>
                 <button class="btn-icon danger" title="Eliminar" onclick="eliminarProducto(${p.id})"><i data-lucide="trash-2"></i></button>
             </td>
@@ -333,6 +353,43 @@ async function eliminarProducto(id) {
     if (!res.ok) return toast(res.error || 'No se pudo eliminar producto', 'error');
     toast(res.recetas_eliminadas ? 'Producto y registro eliminados' : 'Producto eliminado');
     await cargar();
+}
+
+async function abrirHistorialMovimientos(productoId) {
+    productoHistorialId = productoId;
+    const producto = productos.find(p => p.id === productoId);
+    document.getElementById('historial-mov-titulo').textContent = `Movimientos: ${producto?.nombre || ''}`;
+    openModal('modal-historial-mov');
+    await cargarHistorialMovimientos();
+}
+
+async function cargarHistorialMovimientos() {
+    if (!productoHistorialId) return;
+    const producto = productos.find(p => p.id === productoHistorialId);
+    const rows = await api.get(`/api/movimientos/${productoHistorialId}`);
+    const tbody = document.getElementById('tbl-historial-mov');
+    tbody.innerHTML = rows.length ? rows.map(m => `
+        <tr>
+            <td>${fmtFecha(m.fecha)}</td>
+            <td><span class="badge ${m.tipo === 'entrada' ? 'badge-green' : 'badge-red'}">${m.tipo}</span></td>
+            <td>${cantidadConUnidad(m.cantidad, producto?.unidad || '')}</td>
+            <td>${m.motivo || '&mdash;'}</td>
+            <td>${m.usuario || '&mdash;'}</td>
+            <td>
+                <button class="btn-icon danger" title="Eliminar movimiento" onclick="eliminarMovimientoInventario(${m.id})"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>
+    `).join('') : '<tr><td colspan="6" style="text-align:center;padding:1.25rem;color:#9ca3af">Sin movimientos</td></tr>';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function eliminarMovimientoInventario(id) {
+    if (!confirmar('Eliminar este movimiento ajustara el stock del producto. Continuar?')) return;
+    const res = await api.delete(`/api/movimientos/${id}`);
+    if (!res.ok) return toast(res.error || 'No se pudo eliminar movimiento', 'error');
+    toast('Movimiento eliminado y stock ajustado');
+    await cargar();
+    await cargarHistorialMovimientos();
 }
 
 async function guardarMovimiento(e) {

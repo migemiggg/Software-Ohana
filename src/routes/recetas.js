@@ -6,6 +6,8 @@ const router  = express.Router();
 router.use(requireLogin);
 
 function parseIngredientes(ingredientes, productoTerminadoId) {
+    // Aqui se limpian y validan los ingredientes antes de guardar la receta.
+    // La regla importante es que una receta solo puede usar insumos, no productos terminados.
     if (!Array.isArray(ingredientes) || !ingredientes.length) {
         const err = new Error('Agrega al menos un ingrediente a la receta.');
         err.status = 400;
@@ -70,6 +72,8 @@ function getCategoriaId(nombre) {
 }
 
 function calcularCostoUnitario(ingredientes, porcionesBase) {
+    // Este calculo arma el costo del producto terminado usando el precio de cada insumo.
+    // Se divide entre la produccion base para obtener el costo por unidad vendible.
     const getProducto = db.prepare('SELECT precio_unitario FROM productos WHERE id = ?');
     const costoTotal = ingredientes.reduce((total, ing) => {
         const producto = getProducto.get(ing.producto_id);
@@ -79,6 +83,8 @@ function calcularCostoUnitario(ingredientes, porcionesBase) {
 }
 
 function upsertProductoTerminado({ producto_id, nombre, descripcion, unidad, porcionesBase, ingredientes }) {
+    // Esta funcion es el puente entre Registro de productos e Inventario.
+    // Si la receta se crea o edita, aqui se crea/actualiza su producto terminado ligado.
     const categoriaId = getCategoriaId('Productos');
     const costoUnitario = calcularCostoUnitario(ingredientes, porcionesBase);
     const unidadVenta = unidad || 'pza';
@@ -167,6 +173,8 @@ router.post('/api/recetas', (req, res) => {
         if (existente) return res.status(400).json({ error: 'Ya existe una receta con este nombre.' });
 
         const result = db.transaction(() => {
+            // Logica principal para agregar receta:
+            // primero se asegura el producto terminado en inventario y despues se guardan sus ingredientes.
             const producto = upsertProductoTerminado({
                 nombre: nombre.trim(),
                 descripcion,
@@ -313,6 +321,8 @@ router.post('/api/recetas/:id/registrar', (req, res) => {
     }
 
     const factor = cantidad / receta.porciones;
+    // El factor convierte la receta base a la cantidad real que se va a producir.
+    // Ejemplo: si la base es 1 litro y produces 10, cada ingrediente se multiplica por 10.
     const calculados = ingredientes.map(ing => ({
         ...ing,
         cantidad_necesaria: +(ing.cantidad * factor).toFixed(3)
@@ -332,6 +342,8 @@ router.post('/api/recetas/:id/registrar', (req, res) => {
     }
 
     db.transaction(() => {
+        // Produccion real: se descuentan insumos y se agrega el producto terminado.
+        // Tambien se registra cada movimiento para que el historial explique de donde salio el stock.
         for (const ing of calculados) {
             db.prepare(`
                 UPDATE productos
