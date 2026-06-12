@@ -1,6 +1,8 @@
 let map;
 let userMarker = null;
 let locations = [];
+let clientes = [];
+let productos = [];
 let markers = new Map();
 let selectedLocationId = null;
 
@@ -88,7 +90,7 @@ function renderLista() {
     cont.innerHTML = locations.map(location => {
         const inventory = (location.inventory || []).slice(0, 5).map(item => `
             <div class="location-product">
-                <span>${item.product_name}<small>${item.product_type || '-'} &middot; ${item.presentation || '-'}</small></span>
+                <span>${item.product_name}<small>${item.categoria || item.product_type || '-'} &middot; ${item.unidad || item.presentation || '-'}</small></span>
                 <strong>${Number(item.quantity).toLocaleString('es-MX')}</strong>
                 <button class="btn-icon" title="Editar producto" onclick='event.stopPropagation(); abrirInventario(${location.id}, ${JSON.stringify(item)})'><i data-lucide="pencil"></i></button>
                 <button class="btn-icon danger" title="Eliminar producto" onclick="event.stopPropagation(); eliminarInventario(${item.id})"><i data-lucide="trash-2"></i></button>
@@ -100,7 +102,7 @@ function renderLista() {
             <div>
                 <h4>${location.name}</h4>
                 <p>${location.address}</p>
-                <small>${location.product_count || 0} productos &middot; ${unidadesEncontradas(location).toLocaleString('es-MX')} unidades</small>
+                <small>${location.clientes || 'Sin cliente'} &middot; ${location.product_count || 0} productos &middot; ${unidadesEncontradas(location).toLocaleString('es-MX')} unidades</small>
             </div>
             <div class="location-products">
                 ${inventory || '<span class="product-empty">Sin productos</span>'}
@@ -118,12 +120,10 @@ function renderLista() {
 
 async function cargarDatos() {
     const q = document.getElementById('buscar-producto')?.value || '';
-    const productType = document.getElementById('filtro-tipo')?.value || '';
-    const presentation = document.getElementById('filtro-presentacion')?.value || '';
+    const clienteId = document.getElementById('filtro-cliente')?.value || '';
     const params = new URLSearchParams();
     if (q) params.set('q', q);
-    if (productType) params.set('product_type', productType);
-    if (presentation) params.set('presentation', presentation);
+    if (clienteId) params.set('cliente_id', clienteId);
 
     locations = await api.get(`/api/mapa-inventario/locations?${params.toString()}`);
     renderMarkers();
@@ -135,7 +135,24 @@ async function cargarStats() {
     document.getElementById('stat-locations').textContent = stats.locations;
     document.getElementById('stat-products').textContent = stats.products;
     document.getElementById('stat-units').textContent = Number(stats.units || 0).toLocaleString('es-MX');
-    document.getElementById('stat-types').textContent = stats.productTypes;
+    document.getElementById('stat-clients').textContent = stats.clients || 0;
+}
+
+async function cargarCatalogos() {
+    [clientes, productos] = await Promise.all([
+        api.get('/api/clientes'),
+        api.get('/api/productos')
+    ]);
+
+    const filtroCliente = document.getElementById('filtro-cliente');
+    const locCliente = document.getElementById('loc-cliente');
+    const clienteOptions = clientes.map(c => `<option value="${c.id}">${c.nombre}${c.contacto ? ' - ' + c.contacto : ''}</option>`).join('');
+    filtroCliente.innerHTML = '<option value="">Todos los clientes</option>' + clienteOptions;
+    locCliente.innerHTML = '<option value="">Seleccionar cliente...</option>' + clienteOptions;
+
+    document.getElementById('productos-lista').innerHTML = productos.map(p =>
+        `<option value="${p.nombre}" data-id="${p.id}">${p.categoria || 'Sin categoria'} - ${p.unidad}</option>`
+    ).join('');
 }
 
 async function cargarHistorial() {
@@ -161,8 +178,7 @@ function aplicarFiltros() {
 
 function limpiarFiltros() {
     document.getElementById('buscar-producto').value = '';
-    document.getElementById('filtro-tipo').value = '';
-    document.getElementById('filtro-presentacion').value = '';
+    document.getElementById('filtro-cliente').value = '';
     cargarDatos();
 }
 
@@ -185,6 +201,8 @@ function abrirUbicacion(id = null) {
     const location = id ? locations.find(item => item.id === id) : null;
     document.getElementById('ubicacion-titulo').textContent = location ? 'Editar ubicacion' : 'Nueva ubicacion';
     document.getElementById('loc-id').value = location?.id || '';
+    const selectedCliente = clientes.find(c => location?.clientes?.split(',').map(v => v.trim()).includes(c.nombre));
+    document.getElementById('loc-cliente').value = selectedCliente?.id || document.getElementById('filtro-cliente').value || '';
     document.getElementById('loc-name').value = location?.name || '';
     document.getElementById('loc-address').value = location?.address || '';
     document.getElementById('loc-latitude').value = location?.latitude || '';
@@ -203,6 +221,7 @@ async function guardarUbicacion(event) {
     event.preventDefault();
     const id = document.getElementById('loc-id').value;
     const payload = {
+        cliente_id: document.getElementById('loc-cliente').value,
         name: document.getElementById('loc-name').value,
         address: document.getElementById('loc-address').value,
         latitude: document.getElementById('loc-latitude').value,
@@ -215,6 +234,28 @@ async function guardarUbicacion(event) {
     if (!res.ok) return toast(res.error || 'No se pudo guardar', 'error');
     closeModal('modal-ubicacion');
     toast('Ubicacion guardada');
+    await refrescarTodo();
+}
+
+function abrirCliente() {
+    document.getElementById('cli-nombre').value = '';
+    document.getElementById('cli-contacto').value = '';
+    document.getElementById('cli-correo').value = '';
+    document.getElementById('cli-notas').value = '';
+    openModal('modal-cliente');
+}
+
+async function guardarCliente(event) {
+    event.preventDefault();
+    const res = await api.post('/api/clientes', {
+        nombre: document.getElementById('cli-nombre').value,
+        contacto: document.getElementById('cli-contacto').value,
+        correo: document.getElementById('cli-correo').value,
+        notas: document.getElementById('cli-notas').value
+    });
+    if (!res.ok) return toast(res.error || 'No se pudo guardar cliente', 'error');
+    closeModal('modal-cliente');
+    toast('Cliente guardado');
     await refrescarTodo();
 }
 
@@ -231,23 +272,31 @@ function abrirInventario(locationId, item = null) {
     document.getElementById('inventario-titulo').textContent = location ? `Inventario: ${location.name}` : 'Inventario';
     document.getElementById('inv-location-id').value = locationId;
     document.getElementById('inv-id').value = item?.id || '';
-    document.getElementById('inv-product').value = item?.product_name || '';
-    document.getElementById('inv-product-type').value = item?.product_type || item?.category || '';
-    document.getElementById('inv-presentation').value = item?.presentation || '';
+    document.getElementById('inv-product-search').value = item?.product_name || '';
+    document.getElementById('inv-producto-id').value = item?.producto_id || productos.find(p => p.nombre === item?.product_name)?.id || '';
     document.getElementById('inv-quantity').value = item?.quantity ?? '';
     document.getElementById('inv-image').value = item?.image_url || '';
     document.getElementById('inv-notes').value = item?.notes || '';
     openModal('modal-inventario');
 }
 
+function sincronizarProductoSeleccionado() {
+    const nombre = normalizar(document.getElementById('inv-product-search').value);
+    const producto = productos.find(p => normalizar(p.nombre) === nombre);
+    document.getElementById('inv-producto-id').value = producto?.id || '';
+}
+
 async function guardarInventario(event) {
     event.preventDefault();
+    sincronizarProductoSeleccionado();
+    if (!document.getElementById('inv-producto-id').value) {
+        toast('Selecciona un producto existente del buscador', 'warn');
+        return;
+    }
     const id = document.getElementById('inv-id').value;
     const payload = {
         location_id: document.getElementById('inv-location-id').value,
-        product_name: document.getElementById('inv-product').value,
-        product_type: document.getElementById('inv-product-type').value,
-        presentation: document.getElementById('inv-presentation').value,
+        producto_id: document.getElementById('inv-producto-id').value,
         quantity: document.getElementById('inv-quantity').value,
         image_url: document.getElementById('inv-image').value,
         notes: document.getElementById('inv-notes').value
@@ -286,14 +335,14 @@ function usarMiUbicacion() {
 }
 
 function exportarCSV() {
-    const header = ['ubicacion', 'direccion', 'latitud', 'longitud', 'producto', 'tipo_producto', 'presentacion', 'cantidad', 'actualizado'];
+    const header = ['cliente', 'ubicacion', 'direccion', 'latitud', 'longitud', 'producto', 'categoria', 'unidad', 'cantidad', 'actualizado'];
     const rows = [];
     locations.forEach(location => {
         if (!location.inventory.length) {
-            rows.push([location.name, location.address, location.latitude, location.longitude, '', '', '', '', '']);
+            rows.push([location.clientes || '', location.name, location.address, location.latitude, location.longitude, '', '', '', '', '']);
         }
         location.inventory.forEach(item => {
-            rows.push([location.name, location.address, location.latitude, location.longitude, item.product_name, item.product_type || '', item.presentation || '', item.quantity, item.updated_at]);
+            rows.push([location.clientes || '', location.name, location.address, location.latitude, location.longitude, item.product_name, item.categoria || item.product_type || '', item.unidad || item.presentation || '', item.quantity, item.updated_at]);
         });
     });
     const csv = [header, ...rows].map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -307,6 +356,7 @@ function exportarCSV() {
 }
 
 async function refrescarTodo() {
+    await cargarCatalogos();
     await Promise.all([cargarStats(), cargarDatos(), cargarHistorial()]);
 }
 
