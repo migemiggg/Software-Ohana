@@ -59,6 +59,7 @@ async function start() {
     app.get('/solicitudes',      requireRoles('admin','empleado'),            (req,res) => res.sendFile('solicitudes.html',       {root:'public'}));
 
     // Admin only
+    app.get('/clientes',         requireRoles('admin'),                       (req,res) => res.sendFile('clientes.html',          {root:'public'}));
     app.get('/pedidos',          requireRoles('admin'),                       (req,res) => res.sendFile('pedidos.html',           {root:'public'}));
     app.get('/recetas',          requireRoles('admin'),                       (req,res) => res.sendFile('recetas.html',           {root:'public'}));
     app.get('/empleados',        requireRoles('admin'),                       (req,res) => res.sendFile('empleados.html',         {root:'public'}));

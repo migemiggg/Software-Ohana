@@ -312,10 +312,11 @@
                                     <th>Unidad</th>
                                     <th>Motivo</th>
                                     <th>Usuario</th>
+                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-movimientos">
-                                <tr><td colspan="8" style="text-align:center;padding:2rem;color:#9ca3af">Selecciona un rango y consulta</td></tr>
+                                <tr><td colspan="9" style="text-align:center;padding:2rem;color:#9ca3af">Selecciona un rango y consulta</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -506,6 +507,9 @@ async function cargarMovimientos() {
             <td>${m.unidad || '—'}</td>
             <td>${m.motivo || '—'}</td>
             <td>${m.usuario}</td>
+            <td>
+                <button class="btn-icon danger" title="Eliminar movimiento" onclick="eliminarMovimientoReporte(${m.id})"><i data-lucide="trash-2"></i></button>
+            </td>
         </tr>`).join('');
     lucide.createIcons();
 }
@@ -513,6 +517,15 @@ async function cargarMovimientos() {
 /* ─────────────────────────────────────────────
    PEDIDOS
    ───────────────────────────────────────────── */
+async function eliminarMovimientoReporte(id) {
+    if (!confirmar('Eliminar este movimiento ajustara el inventario y el reporte. Continuar?')) return;
+    const res = await api.delete(`/api/movimientos/${id}`);
+    if (!res.ok) return toast(res.error || 'No se pudo eliminar movimiento', 'error');
+    toast(`Movimiento eliminado. Stock nuevo: ${res.stock_nuevo}`);
+    await cargarInventario();
+    await cargarMovimientos();
+}
+
 const estadoLabel = {
     pendiente:  ['#fef9c3','#854d0e','Pendiente'],
     en_proceso: ['#dbeafe','#1e40af','En proceso'],

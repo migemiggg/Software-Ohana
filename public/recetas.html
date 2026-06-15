@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OhanApp &ndash; Calculo de insumos</title>
+    <title>OhanApp &ndash; Registro de productos</title>
     <link rel="stylesheet" href="/css/ohana.css">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </head>
@@ -21,7 +21,7 @@
             <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
             <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
             <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
-            <div class="nav-item"><a href="/recetas"><i data-lucide="book-open"></i> Calculo de insumos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="package-check"></i> Registro de productos</a></div>
             <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
             <div class="nav-item"><a href="/empleados"><i data-lucide="users"></i> Empleados</a></div>
             <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
@@ -33,10 +33,15 @@
 
     <div class="main-content">
         <div class="topbar">
-            <h3>Calculo de Insumos</h3>
-            <button class="btn-ohana" onclick="abrirModalReceta()">
-                <i data-lucide="plus"></i> Nueva receta
-            </button>
+            <h3>Registro de Productos</h3>
+            <div style="display:flex;gap:.5rem">
+                <button class="btn-outline" onclick="abrirMovimientos()">
+                    <i data-lucide="history"></i> Movimientos
+                </button>
+                <button class="btn-ohana" onclick="abrirModalReceta()">
+                    <i data-lucide="plus"></i> Nueva receta base
+                </button>
+            </div>
         </div>
 
         <div class="page-body">
@@ -63,16 +68,17 @@
                                     </button>
                                 </div>
                             </div>
-                            <div style="padding:.875rem;display:flex;align-items:center;gap:.75rem">
-                                <label style="font-size:.875rem;font-weight:600;white-space:nowrap">Calcular para</label>
-                                <input type="number" id="porciones-calc" class="form-control" style="width:80px" min="1" step="0.5" value="1" oninput="calcular()">
+                            <div style="padding:.875rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                                <label style="font-size:.875rem;font-weight:600;white-space:nowrap">Cantidad a producir</label>
+                                <input type="number" id="porciones-calc" class="form-control" style="width:90px" min="1" step="1" value="1" oninput="calcular()">
                                 <span id="label-porciones" style="color:#6b7280;font-size:.875rem"></span>
+                                <button class="btn-ohana" onclick="registrarProduccion()"><i data-lucide="package-plus"></i> Registrar produccion</button>
                             </div>
                         </div>
 
                         <div class="table-card">
                             <div class="table-card-header">
-                                <h5>Insumos necesarios</h5>
+                                <h5>Insumos a descontar</h5>
                                 <span id="costo-total" style="font-weight:700;color:var(--ohana-dark);font-size:.9rem"></span>
                             </div>
                             <table>
@@ -85,7 +91,7 @@
                     </div>
 
                     <div id="panel-vacio" style="text-align:center;padding:3rem;color:#9ca3af">
-                        <p style="margin-top:.5rem">Selecciona una receta para calcular insumos.</p>
+                        <p style="margin-top:.5rem">Selecciona una receta para registrar produccion.</p>
                     </div>
                 </div>
             </div>
@@ -107,8 +113,15 @@
                     <input type="text" id="rec-nombre" class="form-control" required>
                 </div>
                 <div class="form-group">
-                    <label>Porciones base</label>
-                    <input type="number" id="rec-porciones" class="form-control" min="0.1" step="0.1" value="1">
+                    <label>Unidad de venta *</label>
+                    <select id="rec-unidad" class="form-control" required>
+                        <option>lt</option><option>pza</option><option>kg</option>
+                        <option>caja</option><option>bolsa</option><option>ml</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Produccion base</label>
+                    <input type="number" id="rec-porciones" class="form-control" min="1" step="1" value="1">
                 </div>
                 <div class="form-group" style="grid-column:1/-1">
                     <label>Descripcion</label>
@@ -130,13 +143,117 @@
     </div>
 </div>
 
+<!-- Modal: CRUD de movimientos -->
+<div class="modal-overlay" id="modal-movimientos">
+    <div class="modal-box" style="max-width:900px">
+        <div class="modal-header">
+            <h4>Movimientos</h4>
+            <button class="modal-close" onclick="closeModal('modal-movimientos')">&#x2715;</button>
+        </div>
+
+        <form id="form-movimiento-receta" onsubmit="guardarMovimientoCRUD(event)" style="margin-bottom:.875rem">
+            <input type="hidden" id="mov-crud-id">
+            <div style="display:grid;grid-template-columns:1.6fr .8fr .8fr 1.4fr auto;gap:.5rem;align-items:end">
+                <div class="form-group" style="margin:0">
+                    <label>Producto *</label>
+                    <select id="mov-crud-producto" class="form-control" required></select>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Tipo *</label>
+                    <select id="mov-crud-tipo" class="form-control">
+                        <option value="entrada">Entrada (+)</option>
+                        <option value="salida">Salida (-)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Cantidad *</label>
+                    <input type="number" id="mov-crud-cantidad" class="form-control" min="0.01" step="0.01" required>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Motivo</label>
+                    <input id="mov-crud-motivo" class="form-control" placeholder="Motivo del movimiento">
+                </div>
+                <div style="display:flex;gap:.35rem">
+                    <button type="button" class="btn-outline" onclick="limpiarMovimientoCRUD()">Nuevo</button>
+                    <button type="submit" class="btn-ohana">Guardar</button>
+                </div>
+            </div>
+        </form>
+
+        <div style="display:flex;gap:.5rem;margin-bottom:.6rem">
+            <input id="buscar-movimientos" class="form-control" placeholder="Buscar producto o motivo..." oninput="cargarMovimientosCRUD()">
+            <button class="btn-outline" onclick="cargarMovimientosCRUD()"><i data-lucide="refresh-cw"></i> Actualizar</button>
+        </div>
+
+        <div class="table-card">
+            <table>
+                <thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Motivo</th><th>Usuario</th><th>Acciones</th></tr></thead>
+                <tbody id="tbl-movimientos-crud">
+                    <tr><td colspan="7" style="text-align:center;padding:1.25rem;color:#9ca3af">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div id="toast"></div>
 <script src="/js/app.js"></script>
 <script>
-let recetas = [], productos = [], recetaSelId = null, recetaEnEdicion = null;
+let recetas = [], productos = [], productosMovimiento = [], movimientosCRUD = [], recetaSelId = null, recetaEnEdicion = null, movimientoEditId = null;
+
+function productoPorId(id) {
+    return productos.find(p => String(p.id) === String(id));
+}
+
+function numeroLimpio(valor, maxDecimales = 3) {
+    const n = Number(valor || 0);
+    return n.toLocaleString('es-MX', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDecimales
+    });
+}
+
+function cantidadParaUso(cantidad, unidad) {
+    const n = Number(cantidad || 0);
+    if (unidad === 'kg') return `${numeroLimpio(n * 1000, 2)} g`;
+    if (unidad === 'lt') return `${numeroLimpio(n * 1000, 2)} ml`;
+    return `${numeroLimpio(n, 3)} ${unidad}`;
+}
+
+function stockParaVista(cantidad, unidad) {
+    const decimales = unidad === 'pza' ? 0 : 2;
+    return `${numeroLimpio(cantidad, decimales)} ${unidad}`;
+}
+
+function cantidadParaFormulario(cantidad, unidad) {
+    const n = Number(cantidad || 0);
+    if (unidad === 'kg' || unidad === 'lt') return numeroLimpio(n * 1000, 2);
+    return numeroLimpio(n, 3);
+}
+
+function cantidadDesdeFormulario(cantidad, unidad) {
+    const n = Number(cantidad || 0);
+    return unidad === 'kg' || unidad === 'lt' ? Number((n / 1000).toFixed(6)) : n;
+}
+
+function textoCantidadIngrediente(unidad) {
+    if (unidad === 'kg' || unidad === 'g') return 'Cantidad (g)';
+    if (unidad === 'lt' || unidad === 'ml') return 'Cantidad (ml)';
+    return `Cantidad (${unidad || 'unidad'})`;
+}
+
+function actualizarUnidadIngrediente(select) {
+    const row = select.closest('.ingrediente-row');
+    const producto = productoPorId(select.value);
+    const label = row?.querySelector('.ing-cant-label');
+    if (label) label.textContent = textoCantidadIngrediente(producto?.unidad);
+}
 
 async function cargar() {
-    [recetas, productos] = await Promise.all([api.get('/api/recetas'), api.get('/api/productos')]);
+    const allProductos = await api.get('/api/productos');
+    recetas = await api.get('/api/recetas');
+    productos = allProductos.filter(p => p.categoria !== 'Productos');
+    productosMovimiento = allProductos;
     renderLista();
 }
 
@@ -147,7 +264,7 @@ function renderLista() {
             <div onclick="seleccionarReceta(${r.id})" id="card-receta-${r.id}" class="receta-card"
                  style="padding:.6rem .875rem;border-radius:5px;cursor:pointer;margin-bottom:.25rem;border:1.5px solid transparent;transition:.1s">
                 <strong style="font-size:.875rem">${r.nombre}</strong>
-                <div style="font-size:.75rem;color:#9ca3af">${r.porciones} porciones base</div>
+                <div style="font-size:.75rem;color:#9ca3af">${r.producto_nombre || 'Sin producto ligado'} &middot; base ${r.porciones}</div>
             </div>`).join('')
         : '<p style="color:#9ca3af;padding:.5rem;font-size:.85rem">Sin recetas aun.</p>';
 }
@@ -159,7 +276,7 @@ async function seleccionarReceta(id) {
     if (card) card.style.borderColor = 'var(--ohana-secondary)';
     const r = recetas.find(x => x.id === id);
     document.getElementById('nombre-receta-sel').textContent = r.nombre;
-    document.getElementById('label-porciones').textContent   = `de ${r.porciones}`;
+    document.getElementById('label-porciones').textContent   = `base ${r.porciones} ${r.producto_unidad || ''}`;
     document.getElementById('porciones-calc').value          = r.porciones;
     document.getElementById('panel-vacio').style.display    = 'none';
     document.getElementById('panel-calcular').style.display = 'block';
@@ -176,8 +293,8 @@ async function calcular() {
         ? res.ingredientes.map(i => `
             <tr>
                 <td>${i.producto}</td>
-                <td><strong>${i.cantidad_necesaria}</strong> ${i.unidad}</td>
-                <td>${i.stock_actual} ${i.unidad}</td>
+                <td><strong>${cantidadParaUso(i.cantidad_necesaria, i.unidad)}</strong></td>
+                <td>${stockParaVista(i.stock_actual, i.unidad)}</td>
                 <td>${i.suficiente
                     ? '<span class="badge badge-green">Suficiente</span>'
                     : '<span class="badge badge-red">Sin stock</span>'}</td>
@@ -186,10 +303,32 @@ async function calcular() {
         : '<tr><td colspan="5" style="text-align:center;padding:1rem;color:#9ca3af">Sin ingredientes</td></tr>';
 }
 
+async function registrarProduccion() {
+    if (!recetaSelId) return;
+    const cantidad = parseFloat(document.getElementById('porciones-calc').value) || 0;
+    const res = await api.post(`/api/recetas/${recetaSelId}/registrar`, { cantidad });
+    if (res.ok) {
+        toast('Produccion registrada e inventario actualizado');
+        await cargar();
+        await seleccionarReceta(recetaSelId);
+        return;
+    }
+
+    if (res.faltantes && res.faltantes.length) {
+        const lista = res.faltantes.map(f =>
+            `${f.producto}: ${stockParaVista(f.stock_actual, f.unidad)} disponible / ${cantidadParaUso(f.necesario, f.unidad)} necesario`
+        ).join(', ');
+        toast(lista, 'error');
+    } else {
+        toast(res.error || 'No se pudo registrar produccion', 'error');
+    }
+}
+
 function abrirModalReceta() {
     recetaEnEdicion = null;
     document.getElementById('form-receta').reset();
     document.getElementById('ingredientes-form').innerHTML = '';
+    document.getElementById('rec-unidad').value = 'lt';
     document.getElementById('modal-receta-titulo').textContent = 'Nueva Receta';
     openModal('modal-receta');
 }
@@ -202,22 +341,25 @@ async function editarRecetaSel() {
     
     document.getElementById('rec-nombre').value = res.nombre;
     document.getElementById('rec-desc').value = res.descripcion || '';
+    document.getElementById('rec-unidad').value = res.producto_unidad || 'lt';
     document.getElementById('rec-porciones').value = res.porciones;
     
     document.getElementById('ingredientes-form').innerHTML = '';
     if (res.ingredientes && res.ingredientes.length) {
         for (const ing of res.ingredientes) {
+            const producto = productoPorId(ing.producto_id);
             const opts = productos.map(p => `<option value="${p.id}" ${p.id == ing.producto_id ? 'selected' : ''}>${p.nombre} (${p.unidad})</option>`).join('');
             const div  = document.createElement('div');
+            div.className = 'ingrediente-row';
             div.style  = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
             div.innerHTML = `
                 <div class="form-group" style="margin:0">
                     <label style="font-size:.75rem">Ingrediente</label>
-                    <select class="form-control ing-prod">${opts}</select>
+                    <select class="form-control ing-prod" onchange="actualizarUnidadIngrediente(this)">${opts}</select>
                 </div>
                 <div class="form-group" style="margin:0">
-                    <label style="font-size:.75rem">Cantidad</label>
-                    <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="${ing.cantidad}" required>
+                    <label class="ing-cant-label" style="font-size:.75rem">${textoCantidadIngrediente(producto?.unidad)}</label>
+                    <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="${cantidadParaFormulario(ing.cantidad, producto?.unidad)}" required>
                 </div>
                 <button type="button" onclick="this.parentElement.remove()" style="padding:.4rem .5rem;border:1px solid #e5e7eb;background:#fff;border-radius:5px;cursor:pointer;color:#6b7280;margin-bottom:1px">&#x2715;</button>`;
             document.getElementById('ingredientes-form').appendChild(div);
@@ -230,16 +372,18 @@ async function editarRecetaSel() {
 
 function agregarIngrediente() {
     const opts = productos.map(p => `<option value="${p.id}">${p.nombre} (${p.unidad})</option>`).join('');
+    const producto = productos[0];
     const div  = document.createElement('div');
+    div.className = 'ingrediente-row';
     div.style  = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;margin-bottom:.5rem;align-items:end';
     div.innerHTML = `
         <div class="form-group" style="margin:0">
             <label style="font-size:.75rem">Ingrediente</label>
-            <select class="form-control ing-prod">${opts}</select>
+            <select class="form-control ing-prod" onchange="actualizarUnidadIngrediente(this)">${opts}</select>
         </div>
         <div class="form-group" style="margin:0">
-            <label style="font-size:.75rem">Cantidad</label>
-            <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="1" required>
+            <label class="ing-cant-label" style="font-size:.75rem">${textoCantidadIngrediente(producto?.unidad)}</label>
+            <input type="number" class="form-control ing-cant" min="0.001" step="0.001" value="${['kg','g','lt','ml'].includes(producto?.unidad) ? 100 : 1}" required>
         </div>
         <button type="button" onclick="this.parentElement.remove()" style="padding:.4rem .5rem;border:1px solid #e5e7eb;background:#fff;border-radius:5px;cursor:pointer;color:#6b7280;margin-bottom:1px">&#x2715;</button>`;
     document.getElementById('ingredientes-form').appendChild(div);
@@ -247,13 +391,18 @@ function agregarIngrediente() {
 
 async function guardarReceta(e) {
     e.preventDefault();
-    const ingredientes = [...document.querySelectorAll('#ingredientes-form > div')].map(d => ({
-        producto_id: d.querySelector('.ing-prod').value,
-        cantidad:    parseFloat(d.querySelector('.ing-cant').value)
-    }));
+    const ingredientes = [...document.querySelectorAll('#ingredientes-form > div')].map(d => {
+        const productoId = d.querySelector('.ing-prod').value;
+        const producto = productoPorId(productoId);
+        return {
+            producto_id: productoId,
+            cantidad:    cantidadDesdeFormulario(d.querySelector('.ing-cant').value, producto?.unidad)
+        };
+    });
     const datos = {
         nombre:      document.getElementById('rec-nombre').value,
         descripcion: document.getElementById('rec-desc').value,
+        unidad:      document.getElementById('rec-unidad').value,
         porciones:   parseFloat(document.getElementById('rec-porciones').value) || 1,
         ingredientes
     };
@@ -267,20 +416,110 @@ async function guardarReceta(e) {
     
     if (res.ok) { 
         closeModal('modal-receta'); 
-        toast(recetaEnEdicion ? 'Receta actualizada' : 'Receta guardada'); 
+        toast(recetaEnEdicion ? 'Producto actualizado en inventario' : 'Producto creado en inventario'); 
         await cargar(); 
     }
     else toast(res.error || 'Error', 'error');
 }
 
 async function eliminarRecetaSel() {
-    if (!recetaSelId || !confirmar('Eliminar esta receta?')) return;
+    if (!recetaSelId || !confirmar('Eliminar este registro tambien eliminara el producto terminado en inventario. Continuar?')) return;
     await api.delete(`/api/recetas/${recetaSelId}`);
     recetaSelId = null;
     document.getElementById('panel-calcular').style.display = 'none';
     document.getElementById('panel-vacio').style.display    = 'block';
     toast('Receta eliminada');
     await cargar();
+}
+
+function opcionesMovimientoProducto(selected = '') {
+    return productosMovimiento.map(p =>
+        `<option value="${p.id}" ${String(p.id) === String(selected) ? 'selected' : ''}>${p.nombre} (${p.unidad})</option>`
+    ).join('');
+}
+
+function limpiarMovimientoCRUD() {
+    movimientoEditId = null;
+    document.getElementById('form-movimiento-receta').reset();
+    document.getElementById('mov-crud-id').value = '';
+    document.getElementById('mov-crud-producto').innerHTML = opcionesMovimientoProducto();
+}
+
+async function abrirMovimientos() {
+    if (!productosMovimiento.length) await cargar();
+    limpiarMovimientoCRUD();
+    openModal('modal-movimientos');
+    await cargarMovimientosCRUD();
+}
+
+async function cargarMovimientosCRUD() {
+    const q = document.getElementById('buscar-movimientos')?.value || '';
+    const url = `/api/movimientos?limit=250${q ? `&q=${encodeURIComponent(q)}` : ''}`;
+    movimientosCRUD = await api.get(url);
+    renderMovimientosCRUD();
+}
+
+function renderMovimientosCRUD() {
+    const tbody = document.getElementById('tbl-movimientos-crud');
+    tbody.innerHTML = movimientosCRUD.length ? movimientosCRUD.map(m => `
+        <tr>
+            <td>${fmtFecha(m.fecha)}</td>
+            <td><strong>${m.producto_nombre}</strong><br><small style="color:#9ca3af">${m.categoria || '&mdash;'}</small></td>
+            <td><span class="badge ${m.tipo === 'entrada' ? 'badge-green' : 'badge-red'}">${m.tipo}</span></td>
+            <td>${stockParaVista(m.cantidad, m.unidad)}</td>
+            <td>${m.motivo || '&mdash;'}</td>
+            <td>${m.usuario || '&mdash;'}</td>
+            <td style="display:flex;gap:.35rem">
+                <button class="btn-icon" title="Editar" onclick="editarMovimientoCRUD(${m.id})"><i data-lucide="pencil"></i></button>
+                <button class="btn-icon danger" title="Eliminar" onclick="eliminarMovimientoCRUD(${m.id})"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>
+    `).join('') : '<tr><td colspan="7" style="text-align:center;padding:1.25rem;color:#9ca3af">Sin movimientos</td></tr>';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function editarMovimientoCRUD(id) {
+    const mov = movimientosCRUD.find(m => m.id === id);
+    if (!mov) return;
+    movimientoEditId = id;
+    document.getElementById('mov-crud-id').value = id;
+    document.getElementById('mov-crud-producto').innerHTML = opcionesMovimientoProducto(mov.producto_id);
+    document.getElementById('mov-crud-tipo').value = mov.tipo;
+    document.getElementById('mov-crud-cantidad').value = mov.cantidad;
+    document.getElementById('mov-crud-motivo').value = mov.motivo || '';
+}
+
+async function guardarMovimientoCRUD(event) {
+    event.preventDefault();
+    const id = document.getElementById('mov-crud-id').value;
+    const payload = {
+        producto_id: document.getElementById('mov-crud-producto').value,
+        tipo: document.getElementById('mov-crud-tipo').value,
+        cantidad: parseFloat(document.getElementById('mov-crud-cantidad').value),
+        motivo: document.getElementById('mov-crud-motivo').value
+    };
+
+    // En este CRUD el mismo formulario sirve para crear o editar.
+    // El backend ajusta el stock para que el historial y el inventario coincidan.
+    const res = id ? await api.put(`/api/movimientos/${id}`, payload) : await api.post('/api/movimientos', payload);
+    if (!res.ok) return toast(res.error || 'No se pudo guardar movimiento', 'error');
+
+    toast(id ? 'Movimiento editado y stock ajustado' : 'Movimiento agregado');
+    limpiarMovimientoCRUD();
+    await cargar();
+    await cargarMovimientosCRUD();
+    if (recetaSelId) await seleccionarReceta(recetaSelId);
+}
+
+async function eliminarMovimientoCRUD(id) {
+    if (!confirmar('Eliminar este movimiento ajustara el stock. Continuar?')) return;
+    const res = await api.delete(`/api/movimientos/${id}`);
+    if (!res.ok) return toast(res.error || 'No se pudo eliminar movimiento', 'error');
+    const producto = productosMovimiento.find(p => String(p.id) === String(res.producto_id));
+    toast(`Movimiento eliminado. Stock actual: ${stockParaVista(res.stock_nuevo, producto?.unidad || '')}`);
+    await cargar();
+    await cargarMovimientosCRUD();
+    if (recetaSelId) await seleccionarReceta(recetaSelId);
 }
 
 cargar();

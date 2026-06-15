@@ -188,6 +188,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (inventario?.nextSibling) nav.insertBefore(item, inventario.nextSibling);
         else nav.appendChild(item);
     }
+    if (nav && !nav.querySelector('a[href="/clientes"]')) {
+        const item = document.createElement('div');
+        item.className = 'nav-item';
+        item.innerHTML = '<a href="/clientes"><i data-lucide="users"></i> Clientes</a>';
+        const pedidos = nav.querySelector('a[href="/pedidos"]')?.parentElement;
+        if (pedidos) nav.insertBefore(item, pedidos);
+        else nav.appendChild(item);
+    }
+    const recetasLink = nav?.querySelector('a[href="/recetas"]');
+    if (recetasLink) {
+        recetasLink.innerHTML = '<i data-lucide="package-check"></i> Registro de productos';
+    }
 
     // Sidebar: marcar enlace activo
     const path = window.location.pathname;

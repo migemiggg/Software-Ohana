@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OhanApp &ndash; Clientes</title>
+    <link rel="stylesheet" href="/css/ohana.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <img src="/img/ohana-logo-circle.png" alt="Ohana">
+            <div>
+                <span class="brand-name">OhanApp</span>
+                <small>Ohana&reg; &middot; Panel de control</small>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item"><a href="/dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</a></div>
+            <div class="nav-item"><a href="/inventario"><i data-lucide="package"></i> Inventario</a></div>
+            <div class="nav-item"><a href="/mapa-inventario"><i data-lucide="map-pinned"></i> Mapa inventario</a></div>
+            <div class="nav-item"><a href="/clientes"><i data-lucide="users"></i> Clientes</a></div>
+            <div class="nav-item"><a href="/pedidos"><i data-lucide="shopping-cart"></i> Pedidos</a></div>
+            <div class="nav-item"><a href="/recetas"><i data-lucide="package-check"></i> Registro de productos</a></div>
+            <div class="nav-item"><a href="/recordatorios"><i data-lucide="bell"></i> Recordatorios</a></div>
+            <div class="nav-item"><a href="/empleados"><i data-lucide="users-round"></i> Empleados</a></div>
+            <div class="nav-item"><a href="/reportes"><i data-lucide="bar-chart-2"></i> Reportes</a></div>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/logout"><i data-lucide="log-out"></i> Cerrar sesion</a>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h3>Clientes</h3>
+            <button class="btn-ohana" onclick="abrirCliente()">
+                <i data-lucide="plus"></i> Nuevo cliente
+            </button>
+        </div>
+
+        <div class="page-body">
+            <div style="display:flex;gap:.6rem;margin-bottom:.875rem;align-items:center;flex-wrap:wrap">
+                <input type="text" id="buscar-cliente" class="form-control" placeholder="Buscar cliente..." style="max-width:280px" oninput="filtrarClientes()">
+                <button class="btn-outline" onclick="cargarClientes()"><i data-lucide="refresh-cw"></i> Actualizar</button>
+            </div>
+
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cliente</th><th>Contacto</th><th>Correo</th><th>Direccion ligada</th><th>Ubicaciones</th><th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbl-clientes">
+                        <tr><td colspan="6" style="text-align:center;padding:2rem;color:#9ca3af">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-cliente">
+    <div class="modal-box" style="max-width:460px">
+        <div class="modal-header">
+            <h4 id="cliente-titulo">Nuevo cliente</h4>
+            <button class="modal-close" onclick="closeModal('modal-cliente')">&#x2715;</button>
+        </div>
+        <form id="form-cliente" onsubmit="guardarCliente(event)">
+            <input type="hidden" id="cli-id">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input id="cli-nombre" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Contacto</label>
+                <input id="cli-contacto" class="form-control" placeholder="Telefono / WhatsApp">
+            </div>
+            <div class="form-group">
+                <label>Correo</label>
+                <input id="cli-correo" type="email" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Notas</label>
+                <textarea id="cli-notas" class="form-control" rows="2"></textarea>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.5rem">
+                <button type="button" class="btn-outline" onclick="closeModal('modal-cliente')">Cancelar</button>
+                <button type="submit" class="btn-ohana">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="toast"></div>
+<script src="/js/app.js"></script>
+<script>
+let clientes = [];
+
+function limpiar(valor) {
+    return String(valor || '').trim().toLowerCase();
+}
+
+async function cargarClientes() {
+    clientes = await api.get('/api/clientes');
+    filtrarClientes();
+}
+
+function filtrarClientes() {
+    const q = limpiar(document.getElementById('buscar-cliente').value);
+    const lista = clientes.filter(c =>
+        limpiar(c.nombre).includes(q) ||
+        limpiar(c.contacto).includes(q) ||
+        limpiar(c.direccion).includes(q)
+    );
+    renderClientes(lista);
+}
+
+function renderClientes(lista) {
+    const tbody = document.getElementById('tbl-clientes');
+    tbody.innerHTML = lista.length ? lista.map(c => `
+        <tr>
+            <td><strong>${c.nombre}</strong>${c.notas ? `<br><small style="color:#9ca3af">${c.notas}</small>` : ''}</td>
+            <td>${c.contacto || '&mdash;'}</td>
+            <td>${c.correo || '&mdash;'}</td>
+            <td>${c.direccion ? `<strong>${c.ubicacion_nombre || 'Ubicacion'}</strong><br><small style="color:#64748b">${c.direccion}</small>` : '&mdash;'}</td>
+            <td>${Number(c.ubicaciones || 0)}</td>
+            <td style="display:flex;gap:.35rem">
+                <button class="btn-icon" title="Editar" onclick="editarCliente(${c.id})"><i data-lucide="pencil"></i></button>
+                <button class="btn-icon danger" title="Eliminar" onclick="eliminarCliente(${c.id})"><i data-lucide="trash-2"></i></button>
+            </td>
+        </tr>
+    `).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#9ca3af">Sin clientes</td></tr>';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function abrirCliente() {
+    document.getElementById('form-cliente').reset();
+    document.getElementById('cli-id').value = '';
+    document.getElementById('cliente-titulo').textContent = 'Nuevo cliente';
+    openModal('modal-cliente');
+}
+
+function editarCliente(id) {
+    const cliente = clientes.find(c => c.id === id);
+    if (!cliente) return;
+    document.getElementById('cli-id').value = cliente.id;
+    document.getElementById('cli-nombre').value = cliente.nombre || '';
+    document.getElementById('cli-contacto').value = cliente.contacto || '';
+    document.getElementById('cli-correo').value = cliente.correo || '';
+    document.getElementById('cli-notas').value = cliente.notas || '';
+    document.getElementById('cliente-titulo').textContent = 'Editar cliente';
+    openModal('modal-cliente');
+}
+
+async function guardarCliente(event) {
+    event.preventDefault();
+    const id = document.getElementById('cli-id').value;
+    const payload = {
+        nombre: document.getElementById('cli-nombre').value,
+        contacto: document.getElementById('cli-contacto').value,
+        correo: document.getElementById('cli-correo').value,
+        notas: document.getElementById('cli-notas').value
+    };
+
+    // Esta es la parte del CRUD: si hay id actualiza, si no hay id crea un cliente nuevo.
+    const res = id ? await api.put(`/api/clientes/${id}`, payload) : await api.post('/api/clientes', payload);
+    if (!res.ok) return toast(res.error || 'No se pudo guardar cliente', 'error');
+
+    closeModal('modal-cliente');
+    toast(id ? 'Cliente actualizado' : 'Cliente agregado');
+    await cargarClientes();
+}
+
+async function eliminarCliente(id) {
+    const cliente = clientes.find(c => c.id === id);
+    if (!confirmar(`Eliminar cliente "${cliente?.nombre || ''}"? Sus pedidos conservaran el nombre, pero se quitara la liga con ubicaciones.`)) return;
+    const res = await api.delete(`/api/clientes/${id}`);
+    if (!res.ok) return toast(res.error || 'No se pudo eliminar cliente', 'error');
+    toast('Cliente eliminado');
+    await cargarClientes();
+}
+
+cargarClientes();
+</script>
+</body>
+</html>

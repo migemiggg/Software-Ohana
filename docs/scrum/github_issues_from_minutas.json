@@ -1,0 +1,99 @@
+{
+  "issues": [
+    {
+      "title": "Ajustar módulo de pedidos para usar ubicaciones asociadas a clientes",
+      "body": "Permitir que el flujo de pedidos seleccione ubicaciones ya vinculadas a clientes, en lugar de requerir registros nuevos.",
+      "labels": ["Pedidos", "Mejora"]
+    },
+    {
+      "title": "Fortalecer búsquedas de productos en formularios",
+      "body": "Mejorar los filtros y los buscadores en formularios de pedidos y productos para agilizar la captura de datos.",
+      "labels": ["UX", "Búsqueda"]
+    },
+    {
+      "title": "Completar la normalización de la base de datos para clientes y ubicaciones",
+      "body": "Normalizar las tablas de clientes y ubicaciones para evitar duplicidad y garantizar relaciones consistentes.",
+      "labels": ["Base de datos", "Arquitectura"]
+    },
+    {
+      "title": "Refinar la lógica de movimientos de inventario y stock",
+      "body": "Asegurar que los movimientos de inventario registren con precisión insumos, productos terminados, origen y destino.",
+      "labels": ["Inventario", "Movimientos"]
+    },
+    {
+      "title": "Preparar pruebas de flujo completo con un caso de pedido",
+      "body": "Realizar una prueba integral que cubra creación de pedido, selección de producto, ubicación y actualización de inventario.",
+      "labels": ["QA", "Pruebas"]
+    },
+    {
+      "title": "Añadir filtros de búsqueda en el módulo de pedidos",
+      "body": "Implementar filtros y búsqueda rápida para facilitar la selección de productos en el módulo de pedidos.",
+      "labels": ["Pedidos", "Búsqueda"]
+    },
+    {
+      "title": "Ajustar la lógica de inventario para productos terminados",
+      "body": "Separar correctamente productos terminados e insumos en el inventario y mostrar ambos estados claramente.",
+      "labels": ["Inventario", "Mejora"]
+    },
+    {
+      "title": "Optimizar la asociación de clientes con ubicaciones",
+      "body": "Mejorar la relación entre clientes y sus ubicaciones para que el sistema soporte múltiples ubicaciones por cliente.",
+      "labels": ["Clientes", "Ubicaciones"]
+    },
+    {
+      "title": "Mejorar los mensajes de error y confirmación en el sistema",
+      "body": "Agregar mensajes claros al usuario para errores, confirmaciones y acciones de guardado en pedidos e inventario.",
+      "labels": ["UX", "Calidad"]
+    },
+    {
+      "title": "Realizar segunda ronda de pruebas funcionales",
+      "body": "Ejecutar una nueva sesión de pruebas completas para validar ajustes en pedidos, inventario y mapa.",
+      "labels": ["QA", "Pruebas"]
+    },
+    {
+      "title": "Implementar inventario de productos terminados",
+      "body": "Agregar soporte completo en el inventario para productos terminados, diferenciándolos de insumos.",
+      "labels": ["Inventario", "Funcionalidad"]
+    },
+    {
+      "title": "Actualizar lógica de recetas para descontar insumos automáticamente",
+      "body": "Hacer que la producción descuente insumos automáticamente según la receta usada.",
+      "labels": ["Producción", "Automatización"]
+    },
+    {
+      "title": "Modificar módulo de movimientos para incluir productos e insumos",
+      "body": "Registrar movimientos tanto de insumos como de productos terminados dentro del módulo de stock.",
+      "labels": ["Movimientos", "Inventario"]
+    },
+    {
+      "title": "Incorporar confirmación y cancelación de movimientos",
+      "body": "Permitir confirmar o cancelar movimientos antes de registrarlos para corregir errores operativos.",
+      "labels": ["QA", "Movimientos"]
+    },
+    {
+      "title": "Ajustar cálculos de producción por presentación",
+      "body": "Calcular recetas considerando la presentación y tamaño del producto para alcanzar cantidades precisas.",
+      "labels": ["Producción", "Cálculos"]
+    },
+    {
+      "title": "Reestructurar la funcionalidad del mapa para clientes y ubicaciones",
+      "body": "Vincular ubicaciones del mapa a clientes y soporte para múltiples ubicaciones por cliente.",
+      "labels": ["Mapa", "Ubicaciones"]
+    },
+    {
+      "title": "Integrar pedidos con las ubicaciones registradas en el mapa",
+      "body": "Hacer que el módulo de pedidos use las ubicaciones del mapa para mejorar seguimiento de entregas.",
+      "labels": ["Pedidos", "Mapa"]
+    },
+    {
+      "title": "Implementar buscadores de productos en los módulos correspondientes",
+      "body": "Agregar mecanismos de búsqueda en los módulos con grandes listas de productos para mejorar la experiencia.",
+      "labels": ["UX", "Búsqueda"]
+    },
+    {
+      "title": "Rediseñar el módulo de asignación de inventario a ubicaciones",
+      "body": "Sustituir campos Tipo/Tamaño por un buscador al asignar inventario y asociarlo directamente a ubicaciones existentes.",
+      "labels": ["Inventario", "UX"]
+    }
+  ]
+}

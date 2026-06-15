@@ -207,7 +207,7 @@ tr:hover td{background:rgba(255,255,255,.12)}
 
 /* botones */
 .btn-ohana{
-  background:linear-gradient(180deg,var(--sky-2) 0%,var(--sky-1) 100%);
+  background: linear-gradient(180deg,var(--sky-2) 0%,var(--sky-1) 100%);
   color:#fff;border:1px solid rgba(0,0,0,.1);
   padding:.5rem 1rem;border-radius:var(--r-sm);
   font-size:.8rem;font-weight:700;cursor:pointer;
@@ -321,7 +321,7 @@ tr:hover td{background:rgba(255,255,255,.12)}
 /* toast */
 #toast{
   position:fixed;bottom:1.25rem;right:1.25rem;
-  background:linear-gradient(135deg,rgba(8,80,120,.9),rgba(14,108,92,.9));
+  background:var(--glass);
   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
   color:var(--txt-inv);padding:.65rem 1.1rem;border-radius:var(--r);
   font-size:.8rem;font-weight:600;
