@@ -105,7 +105,6 @@ class Db {
                 WHERE cliente_id IS NULL
             `);
         } catch (_) { /* ignorar */ }
-<<<<<<< Updated upstream
         try {
             this._sqldb.exec(`
                 UPDATE pedidos
@@ -126,16 +125,7 @@ class Db {
                   )
             `);
         } catch (_) { /* ignorar */ }
-        // Migraciones: inventario por ubicacion
-        try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN producto_id INTEGER'); } catch (_) { /* ya existe */ }
-        try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN product_type TEXT'); } catch (_) { /* ya existe */ }
-        try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN presentation TEXT'); } catch (_) { /* ya existe */ }
-        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_producto ON location_inventory(producto_id)'); } catch (_) { /* ignorar */ }
-        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_type ON location_inventory(product_type)'); } catch (_) { /* ignorar */ }
-        try { this._sqldb.exec('CREATE INDEX IF NOT EXISTS idx_location_inventory_presentation ON location_inventory(presentation)'); } catch (_) { /* ignorar */ }
-=======
         // Migraciones: inventario por ubicacion y normalizacion de la tabla
->>>>>>> Stashed changes
         try {
             // Asegurar que la columna producto_id existe antes de la normalización
             try { this._sqldb.exec('ALTER TABLE location_inventory ADD COLUMN producto_id INTEGER'); } catch (_) {}
