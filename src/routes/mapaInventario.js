@@ -27,15 +27,15 @@ function getLocationWithInventory(id) {
     if (!location) return null;
     location.inventory = db.prepare(`
         SELECT li.*,
-               COALESCE(p.nombre, li.product_name) AS product_name,
+               p.nombre AS product_name,
                p.unidad,
                p.precio_unitario,
                c.nombre AS categoria
         FROM location_inventory li
-        LEFT JOIN productos p ON p.id = li.producto_id
-        LEFT JOIN categorias c ON c.id = p.categoria_id
+        JOIN productos p ON p.id = li.producto_id
+        JOIN categorias c ON c.id = p.categoria_id
         WHERE li.location_id = ?
-          AND lower(COALESCE(c.nombre, '')) = lower('Productos')
+          AND lower(c.nombre) = lower('Productos')
         ORDER BY product_name
     `).all(id);
     return location;
@@ -59,9 +59,10 @@ router.get('/api/mapa-inventario/stats', (req, res) => {
     `).get().total || 0;
     const clients = db.prepare('SELECT COUNT(*) AS total FROM clientes').get().total || 0;
     const productTypes = db.prepare(`
-        SELECT COUNT(DISTINCT product_type) AS total
-        FROM location_inventory
-        WHERE product_type IS NOT NULL AND TRIM(product_type) <> ''
+        SELECT COUNT(DISTINCT c.id) AS total
+        FROM location_inventory li
+        JOIN productos p ON p.id = li.producto_id
+        JOIN categorias c ON c.id = p.categoria_id
     `).get().total || 0;
     res.json({ locations, products, units, productTypes, clients });
 });
@@ -74,11 +75,11 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
     if (q.trim()) {
         where += ` AND EXISTS (
             SELECT 1 FROM location_inventory li
-            LEFT JOIN productos p ON p.id = li.producto_id
-            LEFT JOIN categorias c ON c.id = p.categoria_id
+            JOIN productos p ON p.id = li.producto_id
+            JOIN categorias c ON c.id = p.categoria_id
             WHERE li.location_id = l.id
-              AND lower(COALESCE(c.nombre, '')) = lower('Productos')
-              AND lower(COALESCE(p.nombre, li.product_name)) LIKE ?
+              AND lower(c.nombre) = lower('Productos')
+              AND lower(p.nombre) LIKE ?
         )`;
         params.push(`%${q.trim().toLowerCase()}%`);
     }
@@ -86,7 +87,9 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
     if (product_type.trim()) {
         where += ` AND EXISTS (
             SELECT 1 FROM location_inventory li
-            WHERE li.location_id = l.id AND lower(li.product_type) = ?
+            JOIN productos p ON p.id = li.producto_id
+            JOIN categorias c ON c.id = p.categoria_id
+            WHERE li.location_id = l.id AND lower(c.nombre) = ?
         )`;
         params.push(product_type.trim().toLowerCase());
     }
@@ -94,7 +97,8 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
     if (presentation.trim()) {
         where += ` AND EXISTS (
             SELECT 1 FROM location_inventory li
-            WHERE li.location_id = l.id AND lower(li.presentation) = ?
+            JOIN productos p ON p.id = li.producto_id
+            WHERE li.location_id = l.id AND lower(p.unidad) = ?
         )`;
         params.push(presentation.trim().toLowerCase());
     }
@@ -128,25 +132,25 @@ router.get('/api/mapa-inventario/locations', (req, res) => {
                    WHERE li3.location_id = l.id
                      AND lower(c3.nombre) = lower('Productos')
                ) AS total_quantity
-        FROM locations l
-        LEFT JOIN cliente_locations cl ON cl.location_id = l.id
-        LEFT JOIN clientes c ON c.id = cl.cliente_id
-        WHERE 1 = 1 ${where}
-        GROUP BY l.id
-        ORDER BY l.name
-    `).all(params);
+         FROM locations l
+         LEFT JOIN cliente_locations cl ON cl.location_id = l.id
+         LEFT JOIN clientes c ON c.id = cl.cliente_id
+         WHERE 1 = 1 ${where}
+         GROUP BY l.id
+         ORDER BY l.name
+     `).all(params);
 
     const inventoryStmt = db.prepare(`
         SELECT li.*,
-               COALESCE(p.nombre, li.product_name) AS product_name,
+               p.nombre AS product_name,
                p.unidad,
                p.precio_unitario,
                c.nombre AS categoria
         FROM location_inventory li
-        LEFT JOIN productos p ON p.id = li.producto_id
-        LEFT JOIN categorias c ON c.id = p.categoria_id
+        JOIN productos p ON p.id = li.producto_id
+        JOIN categorias c ON c.id = p.categoria_id
         WHERE li.location_id = ?
-          AND lower(COALESCE(c.nombre, '')) = lower('Productos')
+          AND lower(c.nombre) = lower('Productos')
         ORDER BY product_name
     `);
 
@@ -284,9 +288,9 @@ router.post('/api/mapa-inventario/inventory', requireRoles('admin'), (req, res) 
     let newId = null;
     db.transaction(() => {
         const info = db.prepare(`
-            INSERT INTO location_inventory (location_id, producto_id, product_name, product_type, presentation, quantity, notes, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(location_id, producto_id, producto.nombre, producto.categoria || null, producto.unidad || null, quantity, notes || null, image_url || null);
+            INSERT INTO location_inventory (location_id, producto_id, quantity, notes, image_url)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(location_id, producto_id, quantity, notes || null, image_url || null);
         newId = info.lastInsertRowid;
 
         db.prepare(`
@@ -319,9 +323,9 @@ router.put('/api/mapa-inventario/inventory/:id', requireRoles('admin'), (req, re
     db.transaction(() => {
         db.prepare(`
             UPDATE location_inventory
-            SET producto_id = ?, product_name = ?, product_type = ?, presentation = ?, quantity = ?, notes = ?, image_url = ?, updated_at = datetime('now')
+            SET producto_id = ?, quantity = ?, notes = ?, image_url = ?, updated_at = datetime('now')
             WHERE id = ?
-        `).run(producto_id, producto.nombre, producto.categoria || null, producto.unidad || null, quantity, notes || null, image_url || null, req.params.id);
+        `).run(producto_id, quantity, notes || null, image_url || null, req.params.id);
 
         db.prepare(`
             INSERT INTO location_inventory_history
@@ -469,9 +473,11 @@ router.get('/api/clientes/:id/locations', (req, res) => {
 
 router.get('/api/mapa-inventario/product-types', (req, res) => {
     const rows = db.prepare(`
-        SELECT DISTINCT product_type
-        FROM location_inventory
-        WHERE product_type IS NOT NULL AND TRIM(product_type) <> ''
+        SELECT DISTINCT c.nombre AS product_type
+        FROM location_inventory li
+        JOIN productos p ON p.id = li.producto_id
+        JOIN categorias c ON c.id = p.categoria_id
+        WHERE c.nombre IS NOT NULL AND TRIM(c.nombre) <> ''
         ORDER BY product_type
     `).all();
     res.json(rows.map(r => r.product_type));

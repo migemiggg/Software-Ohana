@@ -178,11 +178,7 @@ CREATE TABLE IF NOT EXISTS cliente_locations (
 CREATE TABLE IF NOT EXISTS location_inventory (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     location_id  INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
-    producto_id  INTEGER REFERENCES productos(id) ON DELETE SET NULL,
-    product_name TEXT    NOT NULL,
-    product_type TEXT,
-    presentation TEXT,
-    category     TEXT,
+    producto_id  INTEGER NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
     quantity     REAL    NOT NULL DEFAULT 0,
     notes        TEXT,
     image_url    TEXT,
@@ -205,4 +201,4 @@ CREATE INDEX IF NOT EXISTS idx_locations_coords ON locations(latitude, longitude
 CREATE INDEX IF NOT EXISTS idx_cliente_locations_cliente ON cliente_locations(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_cliente_locations_location ON cliente_locations(location_id);
 CREATE INDEX IF NOT EXISTS idx_location_inventory_location ON location_inventory(location_id);
-CREATE INDEX IF NOT EXISTS idx_location_inventory_product ON location_inventory(product_name);
+CREATE INDEX IF NOT EXISTS idx_location_inventory_producto ON location_inventory(producto_id);
